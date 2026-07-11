@@ -4,8 +4,10 @@ export type UserRole = "admin" | "operator";
 
 export interface User extends PocketBaseRecord {
   email: string;
-  name: string;
+  emailVisibility?: boolean;
+  verified?: boolean;
   username: string;
+  name: string;
   avatar?: string;
   role: UserRole;
   is_active: boolean;
@@ -13,7 +15,7 @@ export interface User extends PocketBaseRecord {
 }
 
 export interface LoginInput {
-  identity: string; // email atau username
+  identity: string;
   password: string;
 }
 
@@ -22,7 +24,11 @@ export interface CreateUserInput {
   username: string;
   name: string;
   password: string;
+  passwordConfirm: string;
   role: UserRole;
+  is_active?: boolean;
+  emailVisibility?: boolean;
+  verified?: boolean;
 }
 
 export interface UpdateUserInput {

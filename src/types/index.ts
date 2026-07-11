@@ -5,7 +5,7 @@ export type * from "./transaksi";
 export type * from "./siswa";
 export type * from "./auth";
 
-// Common types
+// Common PocketBase types
 export interface PocketBaseRecord {
   id: string;
   created: string;

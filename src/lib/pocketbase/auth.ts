@@ -3,12 +3,12 @@ import { COLLECTIONS } from "./collections";
 import type { User, LoginInput } from "@/types";
 
 /**
- * Login dengan email + password
+ * Login dengan email/username + password
  */
 export async function login(input: LoginInput): Promise<User> {
   const authData = await pb
     .collection(COLLECTIONS.USERS)
-    .authWithPassword(input.email, input.password);
+    .authWithPassword(input.identity, input.password);
 
   return authData.record as unknown as User;
 }
@@ -48,4 +48,22 @@ export async function refreshAuth(): Promise<User | null> {
     pb.authStore.clear();
     return null;
   }
+}
+
+/**
+ * Update password sendiri
+ */
+export async function changeMyPassword(input: {
+  oldPassword: string;
+  newPassword: string;
+  passwordConfirm: string;
+}): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error("User tidak terauthentikasi");
+
+  await pb.collection(COLLECTIONS.USERS).update(user.id, {
+    oldPassword: input.oldPassword,
+    password: input.newPassword,
+    passwordConfirm: input.passwordConfirm,
+  });
 }

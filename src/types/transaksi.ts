@@ -1,5 +1,6 @@
 import type { PocketBaseRecord } from "./index";
 import type { StockItem } from "./seragam";
+import type { User } from "./auth";
 
 export interface Transaksi extends PocketBaseRecord {
   nama_siswa: string;
@@ -7,7 +8,9 @@ export interface Transaksi extends PocketBaseRecord {
   catatan: string;
   is_cancelled: boolean;
   cancelled_at: string | null;
+  created_by: string;
   expand?: {
+    created_by?: User;
     "transaction_items(transaction)"?: TransactionItem[];
   };
 }
@@ -43,4 +46,5 @@ export interface StockLog extends PocketBaseRecord {
   stok_sesudah: number;
   referensi: string;
   catatan: string;
+  user: string;
 }

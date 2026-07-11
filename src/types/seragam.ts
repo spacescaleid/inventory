@@ -18,7 +18,8 @@ export interface StockItem extends PocketBaseRecord {
   uniform_type: string; // ID jenis seragam
   ukuran: string;
   stok: number;
-  harga: number;
+  stok_awal?: number;
+  harga?: number;
   expand?: {
     uniform_type?: JenisSeragam & {
       expand?: {
@@ -32,6 +33,7 @@ export interface StockItemInput {
   uniform_type: string;
   ukuran: string;
   stok: number;
+  stok_awal?: number;
   harga?: number;
 }
 
