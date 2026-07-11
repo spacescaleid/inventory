@@ -1,0 +1,47 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="#6366F1"/>
+
+  <!-- Package icon -->
+  <g transform="translate(96, 96)">
+    <!-- Box outline -->
+    <path
+      d="M160 40 L296 96 L296 224 L160 280 L24 224 L24 96 Z"
+      fill="none"
+      stroke="white"
+      stroke-width="18"
+      stroke-linejoin="round"
+    />
+
+    <!-- Top line (opening) -->
+    <path
+      d="M24 96 L160 152 L296 96"
+      fill="none"
+      stroke="white"
+      stroke-width="18"
+      stroke-linejoin="round"
+    />
+
+    <!-- Vertical center line -->
+    <line
+      x1="160"
+      y1="152"
+      x2="160"
+      y2="280"
+      stroke="white"
+      stroke-width="18"
+      stroke-linecap="round"
+    />
+
+    <!-- Small stripe accent (represents uniform) -->
+    <rect
+      x="90"
+      y="182"
+      width="30"
+      height="60"
+      rx="4"
+      fill="white"
+      opacity="0.4"
+    />
+  </g>
+</svg>
