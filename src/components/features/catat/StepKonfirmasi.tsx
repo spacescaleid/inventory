@@ -1,9 +1,10 @@
 "use client";
 
 import { Calendar, GraduationCap, User } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { getMockStockItemById } from "@/lib/mock-data";
+import { useStockItem } from "@/hooks/useStok";
 import { useCatatStore } from "@/stores/catatStore";
 import { formatTanggalWaktu } from "@/utils/date";
 import { cn } from "@/utils/cn";
@@ -21,7 +22,14 @@ export function StepKonfirmasi({
     useCatatStore();
 
   const totalItems = items.reduce((sum, item) => sum + item.jumlah, 0);
-  const now = new Date();
+
+  const [mounted, setMounted] = useState(false);
+  const [nowStr, setNowStr] = useState("");
+
+  useEffect(() => {
+    setMounted(true);
+    setNowStr(formatTanggalWaktu(new Date()));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -34,7 +42,7 @@ export function StepKonfirmasi({
         </p>
       </div>
 
-      {/* Ringkasan Identitas */}
+      {/* Identitas */}
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
           Identitas
@@ -60,14 +68,17 @@ export function StepKonfirmasi({
           <div className="flex items-center gap-3">
             <Calendar className="h-4 w-4 text-[var(--color-neutral-400)]" />
             <dt className="text-xs text-[var(--color-neutral-500)]">Waktu:</dt>
-            <dd className="text-xs text-[var(--color-neutral-700)]">
-              {formatTanggalWaktu(now)}
+            <dd
+              className="text-xs text-[var(--color-neutral-700)]"
+              suppressHydrationWarning
+            >
+              {mounted ? nowStr : "\u00A0"}
             </dd>
           </div>
         </dl>
       </div>
 
-      {/* Ringkasan Item */}
+      {/* Items */}
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
@@ -79,66 +90,18 @@ export function StepKonfirmasi({
         </div>
 
         <div className="divide-y divide-[var(--color-neutral-100)]">
-          {items.map((item, idx) => {
-            const stock = item.stockItemId
-              ? getMockStockItemById(item.stockItemId)
-              : null;
-            const jenis = stock?.expand?.uniform_type;
-            const kategori = jenis?.expand?.category;
-            const stokSesudah = stock ? stock.stok - item.jumlah : 0;
-            const isDefisit = stokSesudah < 0;
-
-            return (
-              <div key={item.id} className="py-3 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--color-neutral-800)]">
-                      {jenis?.nama || "Seragam"}{" "}
-                      <span className="font-mono text-[var(--color-neutral-500)]">
-                        ({stock?.ukuran})
-                      </span>
-                    </p>
-                    {kategori && (
-                      <p className="mt-0.5 text-xs text-[var(--color-neutral-500)]">
-                        {kategori.nama}
-                      </p>
-                    )}
-                    {stock && (
-                      <p className="mt-1 font-mono text-[11px] text-[var(--color-neutral-500)]">
-                        Stok: {stock.stok} →{" "}
-                        <span
-                          className={cn(
-                            "font-semibold",
-                            isDefisit
-                              ? "text-[var(--color-danger-600)]"
-                              : "text-[var(--color-neutral-700)]"
-                          )}
-                        >
-                          {stokSesudah}
-                          {isDefisit && " ⚠"}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex-shrink-0 rounded-md bg-[var(--color-primary-50)] px-2.5 py-1">
-                    <span className="font-mono text-sm font-semibold text-[var(--color-primary-700)]">
-                      ×{item.jumlah}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Ukuran index untuk mobile */}
-                <div className="mt-1 font-mono text-[10px] text-[var(--color-neutral-400)]">
-                  #{idx + 1}
-                </div>
-              </div>
-            );
-          })}
+          {items.map((item, idx) => (
+            <ItemPreview
+              key={item.id}
+              stockItemId={item.stockItemId!}
+              jumlah={item.jumlah}
+              index={idx}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Catatan opsional */}
+      {/* Catatan */}
       <div className="space-y-1.5">
         <Label htmlFor="catatan" className="text-sm">
           Catatan{" "}
@@ -175,6 +138,75 @@ export function StepKonfirmasi({
         >
           {isSubmitting ? "Menyimpan..." : "✓ Konfirmasi Simpan"}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function ItemPreview({
+  stockItemId,
+  jumlah,
+  index,
+}: {
+  stockItemId: string;
+  jumlah: number;
+  index: number;
+}) {
+  const { data: stock } = useStockItem(stockItemId);
+
+  if (!stock) {
+    return (
+      <div className="py-3 first:pt-0 last:pb-0">
+        <div className="h-14 animate-pulse rounded bg-[var(--color-neutral-100)]" />
+      </div>
+    );
+  }
+
+  const jenis = stock.expand?.uniform_type;
+  const kategori = jenis?.expand?.category;
+  const stokSesudah = stock.stok - jumlah;
+  const isDefisit = stokSesudah < 0;
+
+  return (
+    <div className="py-3 first:pt-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-[var(--color-neutral-800)]">
+            {jenis?.nama || "Seragam"}{" "}
+            <span className="font-mono text-[var(--color-neutral-500)]">
+              ({stock.ukuran})
+            </span>
+          </p>
+          {kategori && (
+            <p className="mt-0.5 text-xs text-[var(--color-neutral-500)]">
+              {kategori.nama}
+            </p>
+          )}
+          <p className="mt-1 font-mono text-[11px] text-[var(--color-neutral-500)]">
+            Stok: {stock.stok} →{" "}
+            <span
+              className={cn(
+                "font-semibold",
+                isDefisit
+                  ? "text-[var(--color-danger-600)]"
+                  : "text-[var(--color-neutral-700)]"
+              )}
+            >
+              {stokSesudah}
+              {isDefisit && " ⚠"}
+            </span>
+          </p>
+        </div>
+
+        <div className="flex-shrink-0 rounded-md bg-[var(--color-primary-50)] px-2.5 py-1">
+          <span className="font-mono text-sm font-semibold text-[var(--color-primary-700)]">
+            ×{jumlah}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-1 font-mono text-[10px] text-[var(--color-neutral-400)]">
+        #{index + 1}
       </div>
     </div>
   );

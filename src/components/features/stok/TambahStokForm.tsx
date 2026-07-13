@@ -1,13 +1,20 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { Loader2, Package } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -16,9 +23,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { INPUT_LIMITS } from "@/constants/stok";
+import { useStockItemsByJenis } from "@/hooks/useStok";
+import { normalizeUkuran } from "@/utils/format";
 import type { JenisSeragam } from "@/types";
 
 const tambahStokSchema = z.object({
+  jenisId: z.string().min(1, "Jenis seragam wajib dipilih"),
   ukuran: z
     .string()
     .trim()
@@ -45,7 +55,13 @@ interface TambahStokFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jenis: JenisSeragam | null;
-  onSubmit: (values: TambahStokFormValues) => Promise<void> | void;
+  jenisList?: JenisSeragam[];
+  onSubmit: (values: {
+    jenisId: string;
+    ukuran: string;
+    jumlah: number;
+    harga?: number;
+  }) => Promise<void> | void;
   isLoading?: boolean;
 }
 
@@ -53,24 +69,48 @@ export function TambahStokForm({
   open,
   onOpenChange,
   jenis,
+  jenisList = [],
   onSubmit,
   isLoading,
 }: TambahStokFormProps) {
   const form = useForm<TambahStokFormValues>({
     resolver: zodResolver(tambahStokSchema),
     defaultValues: {
+      jenisId: "",
       ukuran: "",
       jumlah: 1,
       harga: undefined,
     },
   });
 
-  // Reset form saat sheet dibuka/ditutup
   useEffect(() => {
-    if (!open) {
-      form.reset();
+    if (open) {
+      form.reset({
+        jenisId: jenis?.id ?? "",
+        ukuran: "",
+        jumlah: 1,
+        harga: undefined,
+      });
     }
-  }, [open, form]);
+  }, [open, jenis, form]);
+
+  const jenisIdValue = form.watch("jenisId");
+  const ukuranValue = form.watch("ukuran");
+  const jumlahValue = form.watch("jumlah");
+  const showJenisSelect = !jenis && jenisList.length > 0;
+
+  // Fetch existing items untuk jenis yang dipilih
+  const { data: existingItems } = useStockItemsByJenis(jenisIdValue);
+
+  // Cek apakah ukuran sudah ada
+  const ukuranPreview = ukuranValue ? normalizeUkuran(ukuranValue) : "";
+  const existingItem = useMemo(() => {
+    if (!ukuranPreview || !existingItems) return null;
+    return existingItems.find((item) => item.ukuran === ukuranPreview) ?? null;
+  }, [ukuranPreview, existingItems]);
+
+  const showCaseHint =
+    ukuranValue && ukuranValue !== ukuranPreview && ukuranValue.length > 0;
 
   const handleSubmit = async (values: TambahStokFormValues) => {
     await onSubmit(values);
@@ -80,9 +120,8 @@ export function TambahStokForm({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="rounded-t-2xl px-4 pb-6 pt-0 sm:max-w-lg sm:mx-auto"
+        className="max-h-[90vh] overflow-y-auto rounded-t-2xl px-4 pb-6 pt-0 sm:max-w-lg sm:mx-auto"
       >
-        {/* Drag handle */}
         <div className="mx-auto mt-3 mb-4 h-1 w-8 rounded-full bg-[var(--color-neutral-300)]" />
 
         <SheetHeader className="text-left">
@@ -90,7 +129,7 @@ export function TambahStokForm({
           <SheetDescription>
             {jenis
               ? `Tambah ukuran & jumlah untuk ${jenis.nama}`
-              : "Isi detail stok baru"}
+              : "Pilih jenis dan isi detail stok baru"}
           </SheetDescription>
         </SheetHeader>
 
@@ -98,7 +137,46 @@ export function TambahStokForm({
           onSubmit={form.handleSubmit(handleSubmit)}
           className="mt-6 space-y-4"
         >
-          {/* Ukuran */}
+          {showJenisSelect && (
+            <div className="space-y-1.5">
+              <Label htmlFor="jenisId">
+                Jenis Seragam{" "}
+                <span className="text-[var(--color-danger-500)]">*</span>
+              </Label>
+              <Select
+                value={jenisIdValue}
+                onValueChange={(v) => form.setValue("jenisId", v)}
+              >
+                <SelectTrigger id="jenisId" className="h-11 w-full">
+                  <SelectValue placeholder="Pilih jenis seragam" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jenisList.map((j) => (
+                    <SelectItem key={j.id} value={j.id}>
+                      {j.expand?.category?.nama
+                        ? `${j.expand.category.nama} — ${j.nama}`
+                        : j.nama}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.jenisId && (
+                <p className="text-xs text-[var(--color-danger-600)]">
+                  ⚠ {form.formState.errors.jenisId.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {jenis && (
+            <div className="rounded-lg bg-[var(--color-neutral-100)] px-3 py-2 text-xs text-[var(--color-neutral-600)]">
+              Menambah stok untuk:{" "}
+              <strong className="text-[var(--color-neutral-800)]">
+                {jenis.nama}
+              </strong>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="ukuran">
               Ukuran <span className="text-[var(--color-danger-500)]">*</span>
@@ -109,22 +187,49 @@ export function TambahStokForm({
               {...form.register("ukuran")}
               autoComplete="off"
               aria-invalid={!!form.formState.errors.ukuran}
+              className="uppercase"
+              style={{ textTransform: "uppercase" }}
             />
             {form.formState.errors.ukuran ? (
               <p className="text-xs text-[var(--color-danger-600)]">
-                {form.formState.errors.ukuran.message}
+                ⚠ {form.formState.errors.ukuran.message}
+              </p>
+            ) : showCaseHint ? (
+              <p className="text-xs text-[var(--color-info-600)]">
+                💡 Akan disimpan sebagai:{" "}
+                <strong className="font-mono">{ukuranPreview}</strong>
               </p>
             ) : (
               <p className="text-xs text-[var(--color-neutral-500)]">
-                Bebas: huruf (M, XL) atau angka (32, 36)
+                Otomatis huruf besar. Bebas: huruf (M, XL) atau angka (32, 36)
               </p>
             )}
           </div>
 
-          {/* Jumlah */}
+          {/* Info box: ukuran sudah ada → akan increment */}
+          {existingItem && (
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--color-info-200)] bg-[var(--color-info-50)] p-3">
+              <Package className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--color-info-600)]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-[var(--color-info-700)]">
+                  Ukuran {ukuranPreview} sudah ada (stok: {existingItem.stok})
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--color-info-600)]">
+                  Jumlah baru akan{" "}
+                  <strong>ditambahkan ke stok yang ada</strong>. Total menjadi:{" "}
+                  <strong className="font-mono">
+                    {existingItem.stok + (jumlahValue || 0)} unit
+                  </strong>
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="jumlah">
-              Jumlah <span className="text-[var(--color-danger-500)]">*</span>
+              Jumlah{" "}
+              {existingItem ? "yang Diterima" : ""}{" "}
+              <span className="text-[var(--color-danger-500)]">*</span>
             </Label>
             <Input
               id="jumlah"
@@ -138,12 +243,11 @@ export function TambahStokForm({
             />
             {form.formState.errors.jumlah && (
               <p className="text-xs text-[var(--color-danger-600)]">
-                {form.formState.errors.jumlah.message}
+                ⚠ {form.formState.errors.jumlah.message}
               </p>
             )}
           </div>
 
-          {/* Harga (opsional) */}
           <div className="space-y-1.5">
             <Label htmlFor="harga">
               Harga per Unit{" "}
@@ -157,7 +261,11 @@ export function TambahStokForm({
                 id="harga"
                 type="number"
                 inputMode="numeric"
-                placeholder="0"
+                placeholder={
+                  existingItem?.harga
+                    ? String(existingItem.harga)
+                    : "0"
+                }
                 min={0}
                 className="pl-10"
                 {...form.register("harga", {
@@ -167,14 +275,19 @@ export function TambahStokForm({
                 aria-invalid={!!form.formState.errors.harga}
               />
             </div>
+            {existingItem?.harga && (
+              <p className="text-xs text-[var(--color-neutral-500)]">
+                Harga saat ini: Rp {existingItem.harga.toLocaleString("id-ID")}.
+                Kosongkan untuk tetap.
+              </p>
+            )}
             {form.formState.errors.harga && (
               <p className="text-xs text-[var(--color-danger-600)]">
-                {form.formState.errors.harga.message}
+                ⚠ {form.formState.errors.harga.message}
               </p>
             )}
           </div>
 
-          {/* Actions */}
           <div className="flex gap-2 pt-2">
             <Button
               type="button"
@@ -197,8 +310,10 @@ export function TambahStokForm({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Menyimpan...
                 </>
+              ) : existingItem ? (
+                "Tambahkan ke Stok"
               ) : (
-                "Simpan Stok"
+                "Simpan Stok Baru"
               )}
             </Button>
           </div>

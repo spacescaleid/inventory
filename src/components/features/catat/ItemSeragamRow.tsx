@@ -11,11 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  getMockJenisByKategori,
-  getMockStockByJenis,
-  mockKategoris,
-} from "@/lib/mock-data";
+import { useCategories } from "@/hooks/useCategories";
+import { useUniformTypes } from "@/hooks/useJenis";
+import { useStockItemsByJenis } from "@/hooks/useStok";
 import type { CatatItemInput } from "@/stores/catatStore";
 import { getStokStatus } from "@/utils/stok";
 import { cn } from "@/utils/cn";
@@ -35,16 +33,20 @@ export function ItemSeragamRow({
   onRemove,
   canRemove,
 }: ItemSeragamRowProps) {
-  // Get options based on cascade selection
-  const jenisOptions = item.kategoriId
-    ? getMockJenisByKategori(item.kategoriId)
-    : [];
-  const stockOptions = item.jenisId ? getMockStockByJenis(item.jenisId) : [];
+  // Fetch data
+  const { data: categories } = useCategories();
+  const { data: allJenis } = useUniformTypes();
+  const { data: stockItems } = useStockItemsByJenis(item.jenisId || "");
 
+  // Filter jenis berdasarkan kategori yang dipilih
+  const jenisOptions = item.kategoriId
+    ? (allJenis ?? []).filter((j) => j.category === item.kategoriId)
+    : [];
+
+  const stockOptions = stockItems ?? [];
   const selectedStock = stockOptions.find((s) => s.id === item.stockItemId);
   const stockStatus = selectedStock ? getStokStatus(selectedStock.stok) : null;
-  const isOverStock =
-    selectedStock && item.jumlah > selectedStock.stok;
+  const isOverStock = selectedStock && item.jumlah > selectedStock.stok;
 
   const handleKategoriChange = (value: string) => {
     onUpdate(item.id, {
@@ -67,7 +69,6 @@ export function ItemSeragamRow({
 
   return (
     <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
-      {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
           Item {index + 1}
@@ -87,7 +88,6 @@ export function ItemSeragamRow({
       </div>
 
       <div className="space-y-3">
-        {/* Kategori */}
         <div className="space-y-1">
           <Label className="text-xs">Kategori</Label>
           <Select
@@ -98,7 +98,7 @@ export function ItemSeragamRow({
               <SelectValue placeholder="Pilih kategori" />
             </SelectTrigger>
             <SelectContent>
-              {mockKategoris.map((k) => (
+              {(categories ?? []).map((k) => (
                 <SelectItem key={k.id} value={k.id}>
                   {k.nama}
                 </SelectItem>
@@ -107,7 +107,6 @@ export function ItemSeragamRow({
           </Select>
         </div>
 
-        {/* Jenis */}
         <div className="space-y-1">
           <Label className="text-xs">Jenis Seragam</Label>
           <Select
@@ -118,9 +117,7 @@ export function ItemSeragamRow({
             <SelectTrigger className="h-11 w-full">
               <SelectValue
                 placeholder={
-                  item.kategoriId
-                    ? "Pilih jenis seragam"
-                    : "Pilih kategori dulu"
+                  item.kategoriId ? "Pilih jenis seragam" : "Pilih kategori dulu"
                 }
               />
             </SelectTrigger>
@@ -134,7 +131,6 @@ export function ItemSeragamRow({
           </Select>
         </div>
 
-        {/* Ukuran + Jumlah dalam 2 kolom */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Ukuran</Label>
@@ -144,19 +140,13 @@ export function ItemSeragamRow({
               disabled={!item.jenisId}
             >
               <SelectTrigger className="h-11 w-full">
-                <SelectValue
-                  placeholder={item.jenisId ? "Pilih" : "-"}
-                />
+                <SelectValue placeholder={item.jenisId ? "Pilih" : "-"} />
               </SelectTrigger>
               <SelectContent>
                 {stockOptions.map((s) => {
                   const isHabis = s.stok === 0;
                   return (
-                    <SelectItem
-                      key={s.id}
-                      value={s.id}
-                      disabled={false}
-                    >
+                    <SelectItem key={s.id} value={s.id}>
                       <span className="flex items-center gap-2">
                         <span className="font-mono font-semibold">
                           {s.ukuran}
@@ -191,7 +181,6 @@ export function ItemSeragamRow({
           </div>
         </div>
 
-        {/* Warning stok */}
         {selectedStock && stockStatus && (
           <div
             className={cn(

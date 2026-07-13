@@ -5,18 +5,14 @@ import { useState } from "react";
 import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  getMockKelasSuggestions,
-  getMockNamaSiswaSuggestions,
-} from "@/lib/mock-data";
-import { useCatatStore } from "@/stores/catatStore";
 import { INPUT_LIMITS } from "@/constants/stok";
+import {
+  useAutocompleteKelas,
+  useAutocompleteNamaSiswa,
+} from "@/hooks/useAutocomplete";
+import { useCatatStore } from "@/stores/catatStore";
 import { normalizeKelas, normalizeNama } from "@/utils/format";
 
-/**
- * Parse nama dari format autocomplete "Budi Santoso (VII-A)" → "Budi Santoso"
- * dan sekaligus fill kelas.
- */
 function parseNamaSiswaWithKelas(selected: string): {
   nama: string;
   kelas: string | null;
@@ -30,14 +26,14 @@ function parseNamaSiswaWithKelas(selected: string): {
 
 export function StepIdentitas() {
   const { namaSiswa, kelas, setIdentitas, setStep } = useCatatStore();
-
   const [errors, setErrors] = useState<{ nama?: string; kelas?: string }>({});
 
+  const getNamaSuggestions = useAutocompleteNamaSiswa();
+  const getKelasSuggestions = useAutocompleteKelas();
+
   const handleNamaChange = (value: string) => {
-    // Cek jika value dari autocomplete (format: "Nama (Kelas)")
     const parsed = parseNamaSiswaWithKelas(value);
     if (parsed.kelas && parsed.nama !== value) {
-      // Autofill kelas jika kosong
       setIdentitas(parsed.nama, kelas || parsed.kelas);
     } else {
       setIdentitas(value, kelas);
@@ -73,7 +69,6 @@ export function StepIdentitas() {
       return;
     }
 
-    // Save normalized values
     setIdentitas(namaNormalized, kelasNormalized);
     setStep("seragam");
   };
@@ -92,7 +87,6 @@ export function StepIdentitas() {
       </div>
 
       <div className="space-y-4">
-        {/* Nama Siswa */}
         <div className="space-y-1.5">
           <Label htmlFor="nama-siswa" className="flex items-center gap-1.5">
             <User className="h-3.5 w-3.5" />
@@ -102,7 +96,7 @@ export function StepIdentitas() {
             id="nama-siswa"
             value={namaSiswa}
             onChange={handleNamaChange}
-            getSuggestions={getMockNamaSiswaSuggestions}
+            getSuggestions={getNamaSuggestions}
             placeholder="Contoh: Budi Santoso"
             aria-invalid={!!errors.nama}
             maxLength={INPUT_LIMITS.MAX_NAMA_SISWA_LENGTH}
@@ -113,12 +107,11 @@ export function StepIdentitas() {
             </p>
           ) : (
             <p className="text-xs text-[var(--color-neutral-500)]">
-              Nama lengkap. Klik saran untuk auto-fill kelas.
+              Klik saran untuk auto-fill kelas.
             </p>
           )}
         </div>
 
-        {/* Kelas */}
         <div className="space-y-1.5">
           <Label htmlFor="kelas" className="flex items-center gap-1.5">
             <GraduationCap className="h-3.5 w-3.5" />
@@ -128,7 +121,7 @@ export function StepIdentitas() {
             id="kelas"
             value={kelas}
             onChange={handleKelasChange}
-            getSuggestions={getMockKelasSuggestions}
+            getSuggestions={getKelasSuggestions}
             placeholder="Contoh: VII-A, X IPA 2"
             aria-invalid={!!errors.kelas}
             maxLength={INPUT_LIMITS.MAX_KELAS_LENGTH}
@@ -141,7 +134,6 @@ export function StepIdentitas() {
         </div>
       </div>
 
-      {/* Action */}
       <div className="pt-4">
         <Button
           size="mobile-lg"

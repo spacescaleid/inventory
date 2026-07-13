@@ -11,6 +11,12 @@ export const ROUTES = {
   RIWAYAT_DETAIL: (id: string) => `/riwayat/${id}`,
   PROFIL: "/profil",
 
+  // Operator: kelola data master (kategori, jenis, kelas)
+  KELOLA_DATA: "/kelola-data",
+  KELOLA_KATEGORI: "/kelola-data/kategori",
+  KELOLA_JENIS: "/kelola-data/jenis",
+  KELOLA_KELAS: "/kelola-data/kelas",
+
   // ── ADMIN ROUTES ──
   ADMIN: "/admin",
   ADMIN_USERS: "/admin/users",

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import pb from "@/lib/pocketbase/client";
 import { COLLECTIONS } from "@/lib/pocketbase/collections";
 import { queryKeys } from "@/constants/query-keys";
+import { normalizeUkuran } from "@/utils/format";
+import { getCurrentUser } from "@/lib/pocketbase/client";
 import type {
   StockItem,
   StockItemInput,
@@ -12,9 +14,6 @@ import type {
   JenisSeragam,
 } from "@/types";
 
-/**
- * List semua stock items (dengan expand jenis + kategori)
- */
 export function useStockItems() {
   return useQuery({
     queryKey: queryKeys.stockItems.list(),
@@ -29,9 +28,6 @@ export function useStockItems() {
   });
 }
 
-/**
- * Get single stock item by ID
- */
 export function useStockItem(id: string) {
   return useQuery({
     queryKey: queryKeys.stockItems.detail(id),
@@ -44,9 +40,6 @@ export function useStockItem(id: string) {
   });
 }
 
-/**
- * Get stock items by uniform_type ID
- */
 export function useStockItemsByJenis(uniformTypeId: string) {
   return useQuery({
     queryKey: queryKeys.stockItems.byUniformType(uniformTypeId),
@@ -63,9 +56,6 @@ export function useStockItemsByJenis(uniformTypeId: string) {
   });
 }
 
-/**
- * Get stok menipis (di bawah threshold)
- */
 export function useStokMenipis(threshold: number = 5) {
   return useQuery({
     queryKey: queryKeys.stockItems.menipis(threshold),
@@ -81,14 +71,10 @@ export function useStokMenipis(threshold: number = 5) {
   });
 }
 
-/**
- * Get grouped stock (per kategori → per jenis → items)
- */
 export function useStokGrouped() {
   return useQuery({
     queryKey: queryKeys.stockItems.grouped(),
     queryFn: async (): Promise<StokGrouped[]> => {
-      // Fetch all data secara parallel
       const [categories, uniformTypes, stockItems] = await Promise.all([
         pb.collection(COLLECTIONS.CATEGORIES).getFullList<Kategori>({
           sort: "urutan,nama",
@@ -101,7 +87,6 @@ export function useStokGrouped() {
         }),
       ]);
 
-      // Group jenis by kategori, items by jenis
       const result: StokGrouped[] = [];
 
       for (const kategori of categories) {
@@ -121,7 +106,6 @@ export function useStokGrouped() {
             }),
         }));
 
-        // Skip kategori tanpa items
         if (jenisList.some((j) => j.items.length > 0)) {
           result.push({ kategori, jenisList });
         }
@@ -133,20 +117,172 @@ export function useStokGrouped() {
 }
 
 /**
- * Create stock item baru
+ * Result dari upsert stock (create baru atau increment existing)
+ */
+export interface UpsertStockResult {
+  action: "created" | "incremented";
+  item: StockItem;
+  stokSebelum?: number;
+  stokSesudah?: number;
+  ukuran: string;
+}
+
+/**
+ * Smart create/increment stock:
+ * - Kalau ukuran belum ada → CREATE baru
+ * - Kalau ukuran sudah ada → INCREMENT stok existing
+ *
+ * Ini yang biasa dipakai di aplikasi inventory real.
+ * Kondisi: kalau kamu terima 5 unit "XL" dan sudah ada "XL" 3 unit,
+ * total jadi 8 unit (bukan create record baru).
+ */
+export function useUpsertStock() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: StockItemInput): Promise<UpsertStockResult> => {
+      const user = getCurrentUser();
+      const ukuranNormalized = normalizeUkuran(input.ukuran);
+
+      // Cek existing
+      const existing = await pb
+        .collection(COLLECTIONS.STOCK_ITEMS)
+        .getFullList<StockItem>({
+          filter: `uniform_type = "${input.uniform_type}" && ukuran = "${ukuranNormalized}"`,
+        });
+
+      if (existing.length > 0) {
+        // INCREMENT existing
+        const current = existing[0];
+        const stokSebelum = current.stok;
+        const stokSesudah = stokSebelum + input.stok;
+
+        const updatePayload: Record<string, unknown> = {
+          stok: stokSesudah,
+          stok_awal: (current.stok_awal ?? 0) + input.stok,
+        };
+
+        // Update harga kalau dikirim
+        if (input.harga !== undefined && input.harga > 0) {
+          updatePayload.harga = input.harga;
+        }
+
+        const updated = await pb
+          .collection(COLLECTIONS.STOCK_ITEMS)
+          .update<StockItem>(current.id, updatePayload);
+
+        // Log stock masuk
+        if (user) {
+          try {
+            await pb.collection(COLLECTIONS.STOCK_LOGS).create({
+              stock_item: current.id,
+              tipe: "masuk",
+              jumlah: input.stok,
+              stok_sebelum: stokSebelum,
+              stok_sesudah: stokSesudah,
+              catatan: "Tambah stok",
+              user: user.id,
+            });
+          } catch (err) {
+            console.warn("Stock log failed:", err);
+          }
+        }
+
+        return {
+          action: "incremented",
+          item: updated,
+          stokSebelum,
+          stokSesudah,
+          ukuran: ukuranNormalized,
+        };
+      }
+
+      // CREATE baru
+      const payload: Record<string, unknown> = {
+        uniform_type: input.uniform_type,
+        ukuran: ukuranNormalized,
+        stok: input.stok,
+        stok_awal: input.stok_awal ?? input.stok,
+      };
+
+      if (input.harga !== undefined && input.harga > 0) {
+        payload.harga = input.harga;
+      }
+
+      const created = await pb
+        .collection(COLLECTIONS.STOCK_ITEMS)
+        .create<StockItem>(payload);
+
+      // Log stock masuk (initial)
+      if (user) {
+        try {
+          await pb.collection(COLLECTIONS.STOCK_LOGS).create({
+            stock_item: created.id,
+            tipe: "masuk",
+            jumlah: input.stok,
+            stok_sebelum: 0,
+            stok_sesudah: input.stok,
+            catatan: "Stok awal",
+            user: user.id,
+          });
+        } catch (err) {
+          console.warn("Stock log failed:", err);
+        }
+      }
+
+      return {
+        action: "created",
+        item: created,
+        stokSebelum: 0,
+        stokSesudah: input.stok,
+        ukuran: ukuranNormalized,
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.stockItems.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.stockLogs.all() });
+    },
+  });
+}
+
+/**
+ * @deprecated Gunakan useUpsertStock untuk experience yang lebih baik.
+ * Kept untuk backwards compatibility.
  */
 export function useCreateStockItem() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (input: StockItemInput) => {
-      return await pb.collection(COLLECTIONS.STOCK_ITEMS).create<StockItem>({
+      const ukuranNormalized = normalizeUkuran(input.ukuran);
+
+      const existing = await pb
+        .collection(COLLECTIONS.STOCK_ITEMS)
+        .getFullList<StockItem>({
+          filter: `uniform_type = "${input.uniform_type}" && ukuran = "${ukuranNormalized}"`,
+        });
+
+      if (existing.length > 0) {
+        throw new Error(
+          `Ukuran ${ukuranNormalized} sudah ada. Edit stok yang ada atau gunakan ukuran lain.`
+        );
+      }
+
+      const payload: Record<string, unknown> = {
         uniform_type: input.uniform_type,
-        ukuran: input.ukuran.trim(),
+        ukuran: ukuranNormalized,
         stok: input.stok,
         stok_awal: input.stok_awal ?? input.stok,
-        harga: input.harga ?? 0,
-      });
+      };
+
+      if (input.harga !== undefined && input.harga > 0) {
+        payload.harga = input.harga;
+      }
+
+      return await pb
+        .collection(COLLECTIONS.STOCK_ITEMS)
+        .create<StockItem>(payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.stockItems.all() });
@@ -169,9 +305,35 @@ export function useUpdateStockItem() {
       id: string;
       input: Partial<StockItemInput>;
     }) => {
+      const payload: Record<string, unknown> = { ...input };
+
+      if (input.ukuran) {
+        const ukuranNormalized = normalizeUkuran(input.ukuran);
+
+        const current = await pb
+          .collection(COLLECTIONS.STOCK_ITEMS)
+          .getOne<StockItem>(id);
+
+        if (ukuranNormalized !== current.ukuran) {
+          const existing = await pb
+            .collection(COLLECTIONS.STOCK_ITEMS)
+            .getFullList<StockItem>({
+              filter: `uniform_type = "${current.uniform_type}" && ukuran = "${ukuranNormalized}" && id != "${id}"`,
+            });
+
+          if (existing.length > 0) {
+            throw new Error(
+              `Ukuran ${ukuranNormalized} sudah ada untuk jenis ini.`
+            );
+          }
+        }
+
+        payload.ukuran = ukuranNormalized;
+      }
+
       return await pb
         .collection(COLLECTIONS.STOCK_ITEMS)
-        .update<StockItem>(id, input);
+        .update<StockItem>(id, payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.stockItems.all() });
@@ -198,9 +360,6 @@ export function useDeleteStockItem() {
   });
 }
 
-/**
- * Tambah stok ke item existing (increment)
- */
 export function useIncrementStock() {
   const qc = useQueryClient();
 
@@ -212,12 +371,10 @@ export function useIncrementStock() {
       stockItemId: string;
       jumlah: number;
     }) => {
-      // Get current stock
       const current = await pb
         .collection(COLLECTIONS.STOCK_ITEMS)
         .getOne<StockItem>(stockItemId);
 
-      // Update
       return await pb
         .collection(COLLECTIONS.STOCK_ITEMS)
         .update<StockItem>(stockItemId, {

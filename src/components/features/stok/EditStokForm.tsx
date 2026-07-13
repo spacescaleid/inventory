@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { INPUT_LIMITS } from "@/constants/stok";
+import { normalizeUkuran } from "@/utils/format";
 import type { StockItem } from "@/types";
 
 const editStokSchema = z.object({
@@ -30,11 +31,7 @@ const editStokSchema = z.object({
     .int("Stok harus bilangan bulat")
     .min(0, "Stok tidak boleh negatif")
     .max(INPUT_LIMITS.MAX_STOK),
-  harga: z
-    .number()
-    .int()
-    .min(0)
-    .optional(),
+  harga: z.number().int().min(0).optional(),
 });
 
 type EditStokFormValues = z.infer<typeof editStokSchema>;
@@ -69,7 +66,6 @@ export function EditStokForm({
     },
   });
 
-  // Reset form saat item berubah
   useEffect(() => {
     if (item && open) {
       form.reset({
@@ -91,8 +87,11 @@ export function EditStokForm({
     }
   };
 
-  const jenisNama =
-    item?.expand?.uniform_type?.nama || "Seragam";
+  const jenisNama = item?.expand?.uniform_type?.nama || "Seragam";
+  const ukuranValue = form.watch("ukuran");
+  const ukuranPreview = ukuranValue ? normalizeUkuran(ukuranValue) : "";
+  const showPreview =
+    ukuranValue && ukuranValue !== ukuranPreview && ukuranValue.length > 0;
 
   return (
     <>
@@ -124,12 +123,19 @@ export function EditStokForm({
                 {...form.register("ukuran")}
                 autoComplete="off"
                 aria-invalid={!!form.formState.errors.ukuran}
+                className="uppercase"
+                style={{ textTransform: "uppercase" }}
               />
-              {form.formState.errors.ukuran && (
+              {form.formState.errors.ukuran ? (
                 <p className="text-xs text-[var(--color-danger-600)]">
-                  {form.formState.errors.ukuran.message}
+                  ⚠ {form.formState.errors.ukuran.message}
                 </p>
-              )}
+              ) : showPreview ? (
+                <p className="text-xs text-[var(--color-info-600)]">
+                  💡 Akan disimpan sebagai:{" "}
+                  <strong className="font-mono">{ukuranPreview}</strong>
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -147,7 +153,7 @@ export function EditStokForm({
               />
               {form.formState.errors.stok ? (
                 <p className="text-xs text-[var(--color-danger-600)]">
-                  {form.formState.errors.stok.message}
+                  ⚠ {form.formState.errors.stok.message}
                 </p>
               ) : (
                 <p className="text-xs text-[var(--color-neutral-500)]">

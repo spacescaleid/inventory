@@ -9,6 +9,8 @@ import { StepPilihSeragam } from "@/components/features/catat/StepPilihSeragam";
 import { StepSukses } from "@/components/features/catat/StepSukses";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useCreateTransaction } from "@/hooks/useTransaksi";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
 import { useCatatStore } from "@/stores/catatStore";
 
 export default function CatatPage() {
@@ -22,10 +24,9 @@ export default function CatatPage() {
     reset,
   } = useCatatStore();
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const createMutation = useCreateTransaction();
 
-  // Simpan snapshot untuk step sukses (sebelum reset)
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [suksesData, setSuksesData] = useState<{
     namaSiswa: string;
     kelas: string;
@@ -33,36 +34,43 @@ export default function CatatPage() {
   } | null>(null);
 
   const handleConfirmSimpan = async () => {
-    setIsSubmitting(true);
-
     try {
-      // TODO: integrasi dengan PocketBase
-      console.log("Simpan transaksi:", { namaSiswa, kelas, items, catatan });
+      const validItems = items.filter(
+        (i) => i.stockItemId !== null && i.jumlah > 0
+      );
 
-      // Simulasi API delay
-      await new Promise((r) => setTimeout(r, 800));
+      if (validItems.length === 0) {
+        toast.error("Tidak ada item yang dipilih");
+        return;
+      }
 
-      // Snapshot data untuk step sukses
-      const totalItems = items.reduce((sum, item) => sum + item.jumlah, 0);
+      await createMutation.mutateAsync({
+        nama_siswa: namaSiswa,
+        kelas,
+        catatan,
+        items: validItems.map((item) => ({
+          stock_item_id: item.stockItemId!,
+          jumlah: item.jumlah,
+        })),
+      });
+
+      const totalItems = validItems.reduce((sum, item) => sum + item.jumlah, 0);
       setSuksesData({ namaSiswa, kelas, totalItems });
 
-      // Pindah ke step sukses
       setStep("sukses");
 
-      // Toast sukses
       toast.success("✓ Pengambilan berhasil dicatat", {
         description: `${namaSiswa} — ${kelas}`,
         duration: 3000,
       });
-    } catch (error) {
-      console.error(error);
-      toast.error("Gagal menyimpan. Coba lagi.");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menyimpan", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
-  // Handle back button — cek apakah ada data yang belum tersimpan
   const handleBack = () => {
     const hasData =
       namaSiswa.trim() ||
@@ -99,21 +107,19 @@ export default function CatatPage() {
       />
 
       <div className="px-4 py-4">
-        {/* Progress indicator — tidak muncul di step sukses */}
         {step !== "sukses" && (
           <div className="mb-6">
             <ProgressStep currentStep={step} />
           </div>
         )}
 
-        {/* Step content */}
         <div>
           {step === "identitas" && <StepIdentitas />}
           {step === "seragam" && <StepPilihSeragam />}
           {step === "konfirmasi" && (
             <StepKonfirmasi
               onConfirm={handleConfirmSimpan}
-              isSubmitting={isSubmitting}
+              isSubmitting={createMutation.isPending}
             />
           )}
           {step === "sukses" && suksesData && (
@@ -126,7 +132,6 @@ export default function CatatPage() {
         </div>
       </div>
 
-      {/* Confirm exit dialog */}
       <ConfirmDialog
         open={showExitConfirm}
         onOpenChange={setShowExitConfirm}

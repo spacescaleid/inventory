@@ -44,6 +44,7 @@ export function normalizeKelas(input: string): string {
 
 /**
  * Normalize nama (Title Case)
+ * @example normalizeNama("budi santoso") → "Budi Santoso"
  */
 export function normalizeNama(input: string): string {
   return input
@@ -53,4 +54,19 @@ export function normalizeNama(input: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+/**
+ * Normalize ukuran seragam ke UPPERCASE untuk konsistensi.
+ * Menghindari duplicate seperti "XL" vs "xl" vs "Xl".
+ *
+ * @example
+ * normalizeUkuran("xl")    → "XL"
+ * normalizeUkuran("M")     → "M"
+ * normalizeUkuran(" small ") → "SMALL"
+ * normalizeUkuran("32.5")  → "32.5"
+ * normalizeUkuran("6-7")   → "6-7"
+ */
+export function normalizeUkuran(input: string): string {
+  return input.trim().toUpperCase();
 }

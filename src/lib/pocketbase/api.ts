@@ -7,12 +7,41 @@ export function parsePocketBaseError(error: unknown): string {
   if (error instanceof ClientResponseError) {
     // Cek data.data error (validation errors per field)
     const data = error.data?.data;
-    if (data && typeof data === "object") {
-      const firstError = Object.values(data)[0] as { message?: string } | undefined;
-      if (firstError?.message) return firstError.message;
+    if (data && typeof data === "object" && Object.keys(data).length > 0) {
+      const errors: string[] = [];
+
+      for (const [field, err] of Object.entries(data)) {
+        if (err && typeof err === "object" && "message" in err) {
+          const errObj = err as { code?: string; message: string };
+
+          // Map common PocketBase error codes ke Indonesian
+          let msg = errObj.message;
+
+          if (errObj.code === "validation_not_unique") {
+            msg = `${field} sudah ada, gunakan nilai lain`;
+          } else if (errObj.code === "validation_required") {
+            msg = `${field} wajib diisi`;
+          } else if (errObj.code === "validation_length_out_of_range") {
+            msg = `${field} panjangnya tidak sesuai`;
+          } else if (errObj.code === "validation_invalid_email") {
+            msg = `${field} bukan format email yang valid`;
+          } else if (errObj.code === "validation_min_number") {
+            msg = `${field} kurang dari minimum`;
+          } else if (errObj.code === "validation_max_number") {
+            msg = `${field} melebihi maksimum`;
+          }
+
+          errors.push(msg);
+        }
+      }
+
+      if (errors.length > 0) {
+        return errors.join(", ");
+      }
     }
 
     // Fallback ke message dari error
+    if (error.response?.message) return error.response.message;
     if (error.message) return error.message;
 
     // Status code based
@@ -50,5 +79,5 @@ export function isAuthError(error: unknown): boolean {
  * Default fetch options untuk PocketBase list queries.
  */
 export const DEFAULT_LIST_OPTIONS = {
-  requestKey: null, // Disable auto-cancel per query
+  requestKey: null,
 };

@@ -1,45 +1,55 @@
 "use client";
 
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { RiwayatDetail } from "@/components/features/riwayat/RiwayatDetail";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ROUTES } from "@/constants/routes";
-import { getMockTransactionById } from "@/lib/mock-data";
+import {
+  useCancelTransaction,
+  useTransaction,
+} from "@/hooks/useTransaksi";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
 import type { Transaksi, TransactionItem } from "@/types";
 
 export default function RiwayatDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [isCancelling, setIsCancelling] = useState(false);
 
-  const transaksi = getMockTransactionById(params.id);
+  const { data: transaksi, isLoading, error } = useTransaction(params.id);
+  const cancelMutation = useCancelTransaction();
 
   const handleCancel = async (
     trx: Transaksi & { items: TransactionItem[] }
   ) => {
-    setIsCancelling(true);
     try {
-      // TODO: integrasi PocketBase
-      console.log("Cancel:", trx.id);
-      await new Promise((r) => setTimeout(r, 600));
-
+      await cancelMutation.mutateAsync(trx.id);
       toast.success("✓ Transaksi berhasil dibatalkan");
       router.push(ROUTES.RIWAYAT);
-    } catch (error) {
-      console.error(error);
-      toast.error("Gagal membatalkan transaksi");
-    } finally {
-      setIsCancelling(false);
+    } catch (err) {
+      toast.error("Gagal membatalkan", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
-  if (!transaksi) {
+  if (isLoading) {
+    return (
+      <>
+        <TopAppBar title="Detail Transaksi" showBack />
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--color-primary-500)]" />
+        </div>
+      </>
+    );
+  }
+
+  if (error || !transaksi) {
     return (
       <>
         <TopAppBar title="Detail Transaksi" showBack />
@@ -70,7 +80,6 @@ export default function RiwayatDetailPage() {
     <>
       <TopAppBar title="Detail Transaksi" showBack />
 
-      {/* Auto-open detail sheet */}
       <RiwayatDetail
         open={true}
         onOpenChange={(open) => {
@@ -78,10 +87,9 @@ export default function RiwayatDetailPage() {
         }}
         transaksi={transaksi}
         onCancel={handleCancel}
-        isCancelling={isCancelling}
+        isCancelling={cancelMutation.isPending}
       />
 
-      {/* Fallback content */}
       <div className="px-4 py-8 text-center text-sm text-[var(--color-neutral-500)]">
         Sedang memuat detail...
       </div>

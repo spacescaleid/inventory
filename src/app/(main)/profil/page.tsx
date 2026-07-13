@@ -1,13 +1,19 @@
 "use client";
 
 import {
+  ChevronRight,
+  GraduationCap,
   KeyRound,
+  Layers,
   Loader2,
   LogOut,
   Mail,
+  Settings,
   Shield,
+  Shirt,
   User as UserIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,8 +27,12 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
 import { useAuth } from "@/hooks/useAuth";
+import { changeMyPassword } from "@/lib/pocketbase/auth";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatRelatif } from "@/utils/date";
+import { cn } from "@/utils/cn";
+import type { LucideIcon } from "lucide-react";
 
 export default function ProfilPage() {
   const router = useRouter();
@@ -51,11 +61,20 @@ export default function ProfilPage() {
   }) => {
     setIsSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      toast.success("✓ Password berhasil diganti");
+      await changeMyPassword(values);
+      toast.success("✓ Password berhasil diganti", {
+        description: "Silakan login ulang dengan password baru",
+      });
       setPasswordFormOpen(false);
-    } catch {
-      toast.error("Gagal ganti password");
+
+      setTimeout(() => {
+        logout();
+        router.replace(ROUTES.LOGIN);
+      }, 1500);
+    } catch (err) {
+      toast.error("Gagal ganti password", {
+        description: parsePocketBaseError(err),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -74,6 +93,7 @@ export default function ProfilPage() {
       <TopAppBar title="Profil" />
 
       <div className="space-y-6 px-4 py-4">
+        {/* Avatar & info */}
         <div className="flex flex-col items-center rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[var(--color-primary-400)] to-[var(--color-primary-600)] text-3xl font-bold text-white shadow-lg">
             {initial}
@@ -93,6 +113,7 @@ export default function ProfilPage() {
           </div>
         </div>
 
+        {/* Informasi Akun */}
         <section>
           <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
             Informasi Akun
@@ -101,7 +122,12 @@ export default function ProfilPage() {
           <div className="overflow-hidden rounded-xl bg-white shadow-sm">
             <InfoRow icon={UserIcon} label="Nama Lengkap" value={user.name} />
             <InfoRow icon={Mail} label="Email" value={user.email} divider />
-            <InfoRow icon={Shield} label="Peran" value="Operator" divider />
+            <InfoRow
+              icon={Shield}
+              label="Peran"
+              value={user.role === "admin" ? "Administrator" : "Operator"}
+              divider
+            />
             {user.last_login && (
               <InfoRow
                 icon={UserIcon}
@@ -113,6 +139,43 @@ export default function ProfilPage() {
           </div>
         </section>
 
+        {/* Kelola Data */}
+        <section>
+          <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
+            Kelola Data Master
+          </h3>
+
+          <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+            <MenuLinkRow
+              icon={Layers}
+              label="Kategori Seragam"
+              description="Seragam Harian, Olahraga, Pramuka"
+              href={ROUTES.KELOLA_KATEGORI}
+              iconBg="bg-[var(--color-primary-100)]"
+              iconColor="text-[var(--color-primary-600)]"
+            />
+            <MenuLinkRow
+              icon={Shirt}
+              label="Jenis Seragam"
+              description="Baju, Celana, Rok, Topi"
+              href={ROUTES.KELOLA_JENIS}
+              iconBg="bg-[var(--color-info-100)]"
+              iconColor="text-[var(--color-info-600)]"
+              divider
+            />
+            <MenuLinkRow
+              icon={GraduationCap}
+              label="Kelas"
+              description="Daftar kelas di sekolah"
+              href={ROUTES.KELOLA_KELAS}
+              iconBg="bg-[var(--color-success-100)]"
+              iconColor="text-[var(--color-success-600)]"
+              divider
+            />
+          </div>
+        </section>
+
+        {/* Keamanan */}
         <section>
           <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
             Keamanan
@@ -135,10 +198,12 @@ export default function ProfilPage() {
                   Perbarui password akun kamu
                 </p>
               </div>
+              <ChevronRight className="h-4 w-4 flex-shrink-0 text-[var(--color-neutral-300)]" />
             </button>
           </div>
         </section>
 
+        {/* Logout */}
         <section>
           <Button
             variant="destructive"
@@ -150,6 +215,10 @@ export default function ProfilPage() {
             Keluar dari Akun
           </Button>
         </section>
+
+        <div className="pt-4 text-center">
+          <p className="text-xs text-[var(--color-neutral-400)]">Versi 1.0.0</p>
+        </div>
       </div>
 
       <ChangeMyPasswordForm
@@ -172,22 +241,27 @@ export default function ProfilPage() {
   );
 }
 
+// ============================================
+// Sub components
+// ============================================
+
 function InfoRow({
   icon: Icon,
   label,
   value,
   divider,
 }: {
-  icon: typeof UserIcon;
+  icon: LucideIcon;
   label: string;
   value: string;
   divider?: boolean;
 }) {
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 ${
-        divider ? "border-t border-[var(--color-neutral-100)]" : ""
-      }`}
+      className={cn(
+        "flex items-center gap-3 px-4 py-3",
+        divider && "border-t border-[var(--color-neutral-100)]"
+      )}
     >
       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-neutral-100)]">
         <Icon className="h-4 w-4 text-[var(--color-neutral-500)]" />
@@ -199,5 +273,53 @@ function InfoRow({
         </p>
       </div>
     </div>
+  );
+}
+
+function MenuLinkRow({
+  icon: Icon,
+  label,
+  description,
+  href,
+  iconBg,
+  iconColor,
+  divider,
+}: {
+  icon: LucideIcon;
+  label: string;
+  description?: string;
+  href: string;
+  iconBg: string;
+  iconColor: string;
+  divider?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-neutral-50)]",
+        divider && "border-t border-[var(--color-neutral-100)]"
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+          iconBg
+        )}
+      >
+        <Icon className={cn("h-5 w-5", iconColor)} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-[var(--color-neutral-800)]">
+          {label}
+        </p>
+        {description && (
+          <p className="mt-0.5 truncate text-xs text-[var(--color-neutral-500)]">
+            {description}
+          </p>
+        )}
+      </div>
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-[var(--color-neutral-300)]" />
+    </Link>
   );
 }

@@ -19,19 +19,9 @@ interface AutocompleteInputProps
   suggestions?: string[];
   getSuggestions?: (query: string) => string[] | Promise<string[]>;
   allowNew?: boolean;
-  parseSelected?: (selected: string) => string; // e.g. "Budi (VII-A)" → "Budi"
+  parseSelected?: (selected: string) => string;
 }
 
-/**
- * Text input dengan autocomplete dropdown.
- *
- * Behavior:
- * - Dropdown muncul setelah user ketik minimal 1 karakter
- * - Debounced (150ms)
- * - Max 5 saran
- * - Bisa keyboard navigation (arrow up/down, enter, escape)
- * - Klik outside untuk close
- */
 export const AutocompleteInput = forwardRef<
   HTMLInputElement,
   AutocompleteInputProps
@@ -58,7 +48,6 @@ export const AutocompleteInput = forwardRef<
     const debouncedValue = useDebounce(value, AUTOCOMPLETE.DEBOUNCE_MS);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Fetch suggestions
     useEffect(() => {
       const fetchSuggestions = async () => {
         if (debouncedValue.length < AUTOCOMPLETE.MIN_CHARS) {
@@ -67,8 +56,13 @@ export const AutocompleteInput = forwardRef<
         }
 
         if (getSuggestions) {
-          const result = await getSuggestions(debouncedValue);
-          setSuggestions(result.slice(0, AUTOCOMPLETE.MAX_SUGGESTIONS));
+          try {
+            const result = await getSuggestions(debouncedValue);
+            setSuggestions(result.slice(0, AUTOCOMPLETE.MAX_SUGGESTIONS));
+          } catch (err) {
+            console.error("Autocomplete error:", err);
+            setSuggestions([]);
+          }
         } else if (staticSuggestions) {
           const q = debouncedValue.toLowerCase();
           setSuggestions(
@@ -82,7 +76,6 @@ export const AutocompleteInput = forwardRef<
       fetchSuggestions();
     }, [debouncedValue, getSuggestions, staticSuggestions]);
 
-    // Close dropdown ketika klik di luar
     useEffect(() => {
       const handleClickOutside = (e: MouseEvent) => {
         if (
