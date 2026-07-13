@@ -1,17 +1,16 @@
 "use client";
 
 import { GraduationCap, User } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
+import { CustomSelect, type SelectOption } from "@/components/shared/CustomSelect";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { INPUT_LIMITS } from "@/constants/stok";
-import {
-  useAutocompleteKelas,
-  useAutocompleteNamaSiswa,
-} from "@/hooks/useAutocomplete";
+import { useAutocompleteNamaSiswa } from "@/hooks/useAutocomplete";
+import { useClasses } from "@/hooks/useKelas";
 import { useCatatStore } from "@/stores/catatStore";
-import { normalizeKelas, normalizeNama } from "@/utils/format";
+import { normalizeNama } from "@/utils/format";
 
 function parseNamaSiswaWithKelas(selected: string): {
   nama: string;
@@ -29,7 +28,18 @@ export function StepIdentitas() {
   const [errors, setErrors] = useState<{ nama?: string; kelas?: string }>({});
 
   const getNamaSuggestions = useAutocompleteNamaSiswa();
-  const getKelasSuggestions = useAutocompleteKelas();
+  const { data: classes } = useClasses();
+
+  // Options untuk dropdown kelas
+  const kelasOptions = useMemo<SelectOption[]>(
+    () =>
+      (classes ?? []).map((k) => ({
+        value: k.nama,
+        label: k.nama,
+        description: `Tahun Ajaran ${k.tahun_ajaran}`,
+      })),
+    [classes]
+  );
 
   const handleNamaChange = (value: string) => {
     const parsed = parseNamaSiswaWithKelas(value);
@@ -48,7 +58,7 @@ export function StepIdentitas() {
 
   const handleNext = () => {
     const namaNormalized = normalizeNama(namaSiswa);
-    const kelasNormalized = normalizeKelas(kelas);
+    const kelasNormalized = kelas.trim();
 
     const newErrors: typeof errors = {};
 
@@ -59,9 +69,7 @@ export function StepIdentitas() {
     }
 
     if (!kelasNormalized) {
-      newErrors.kelas = "Kelas wajib diisi";
-    } else if (kelasNormalized.length > INPUT_LIMITS.MAX_KELAS_LENGTH) {
-      newErrors.kelas = `Maksimal ${INPUT_LIMITS.MAX_KELAS_LENGTH} karakter`;
+      newErrors.kelas = "Kelas wajib dipilih";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -117,14 +125,14 @@ export function StepIdentitas() {
             <GraduationCap className="h-3.5 w-3.5" />
             Kelas <span className="text-[var(--color-danger-500)]">*</span>
           </Label>
-          <AutocompleteInput
+          <CustomSelect
             id="kelas"
             value={kelas}
             onChange={handleKelasChange}
-            getSuggestions={getKelasSuggestions}
-            placeholder="Contoh: VII-A, X IPA 2"
+            options={kelasOptions}
+            placeholder="Pilih kelas"
             aria-invalid={!!errors.kelas}
-            maxLength={INPUT_LIMITS.MAX_KELAS_LENGTH}
+            emptyMessage="Belum ada kelas. Tambah di Kelola Data."
           />
           {errors.kelas && (
             <p className="text-xs text-[var(--color-danger-600)]">

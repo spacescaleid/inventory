@@ -1,16 +1,11 @@
 "use client";
 
 import { AlertCircle, Trash2 } from "lucide-react";
+import { useMemo } from "react";
+import { CustomSelect, type SelectOption } from "@/components/shared/CustomSelect";
 import { StepperInput } from "@/components/shared/StepperInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useCategories } from "@/hooks/useCategories";
 import { useUniformTypes } from "@/hooks/useJenis";
 import { useStockItemsByJenis } from "@/hooks/useStok";
@@ -33,18 +28,43 @@ export function ItemSeragamRow({
   onRemove,
   canRemove,
 }: ItemSeragamRowProps) {
-  // Fetch data
   const { data: categories } = useCategories();
   const { data: allJenis } = useUniformTypes();
   const { data: stockItems } = useStockItemsByJenis(item.jenisId || "");
 
-  // Filter jenis berdasarkan kategori yang dipilih
-  const jenisOptions = item.kategoriId
-    ? (allJenis ?? []).filter((j) => j.category === item.kategoriId)
-    : [];
+  // Options untuk kategori
+  const kategoriOptions = useMemo<SelectOption[]>(
+    () =>
+      (categories ?? []).map((k) => ({
+        value: k.id,
+        label: k.nama,
+      })),
+    [categories]
+  );
 
-  const stockOptions = stockItems ?? [];
-  const selectedStock = stockOptions.find((s) => s.id === item.stockItemId);
+  // Options untuk jenis (filtered by kategori)
+  const jenisOptions = useMemo<SelectOption[]>(() => {
+    if (!item.kategoriId) return [];
+    return (allJenis ?? [])
+      .filter((j) => j.category === item.kategoriId)
+      .map((j) => ({
+        value: j.id,
+        label: j.nama,
+      }));
+  }, [allJenis, item.kategoriId]);
+
+  // Options untuk ukuran
+  const ukuranOptions = useMemo<SelectOption[]>(
+    () =>
+      (stockItems ?? []).map((s) => ({
+        value: s.id,
+        label: s.ukuran,
+        description: s.stok === 0 ? "Habis" : `Stok: ${s.stok} unit`,
+      })),
+    [stockItems]
+  );
+
+  const selectedStock = stockItems?.find((s) => s.id === item.stockItemId);
   const stockStatus = selectedStock ? getStokStatus(selectedStock.stok) : null;
   const isOverStock = selectedStock && item.jumlah > selectedStock.stok;
 
@@ -90,83 +110,40 @@ export function ItemSeragamRow({
       <div className="space-y-3">
         <div className="space-y-1">
           <Label className="text-xs">Kategori</Label>
-          <Select
-            value={item.kategoriId || ""}
-            onValueChange={handleKategoriChange}
-          >
-            <SelectTrigger className="h-11 w-full">
-              <SelectValue placeholder="Pilih kategori" />
-            </SelectTrigger>
-            <SelectContent>
-              {(categories ?? []).map((k) => (
-                <SelectItem key={k.id} value={k.id}>
-                  {k.nama}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CustomSelect
+            value={item.kategoriId ?? ""}
+            onChange={handleKategoriChange}
+            options={kategoriOptions}
+            placeholder="Pilih kategori"
+            emptyMessage="Belum ada kategori"
+          />
         </div>
 
         <div className="space-y-1">
           <Label className="text-xs">Jenis Seragam</Label>
-          <Select
-            value={item.jenisId || ""}
-            onValueChange={handleJenisChange}
+          <CustomSelect
+            value={item.jenisId ?? ""}
+            onChange={handleJenisChange}
+            options={jenisOptions}
+            placeholder={
+              item.kategoriId ? "Pilih jenis seragam" : "Pilih kategori dulu"
+            }
             disabled={!item.kategoriId}
-          >
-            <SelectTrigger className="h-11 w-full">
-              <SelectValue
-                placeholder={
-                  item.kategoriId ? "Pilih jenis seragam" : "Pilih kategori dulu"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {jenisOptions.map((j) => (
-                <SelectItem key={j.id} value={j.id}>
-                  {j.nama}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            emptyMessage="Belum ada jenis di kategori ini"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Ukuran</Label>
-            <Select
-              value={item.stockItemId || ""}
-              onValueChange={handleStockChange}
+            <CustomSelect
+              value={item.stockItemId ?? ""}
+              onChange={handleStockChange}
+              options={ukuranOptions}
+              placeholder={item.jenisId ? "Pilih" : "-"}
               disabled={!item.jenisId}
-            >
-              <SelectTrigger className="h-11 w-full">
-                <SelectValue placeholder={item.jenisId ? "Pilih" : "-"} />
-              </SelectTrigger>
-              <SelectContent>
-                {stockOptions.map((s) => {
-                  const isHabis = s.stok === 0;
-                  return (
-                    <SelectItem key={s.id} value={s.id}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">
-                          {s.ukuran}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-xs",
-                            isHabis
-                              ? "text-[var(--color-danger-600)]"
-                              : "text-[var(--color-neutral-500)]"
-                          )}
-                        >
-                          {isHabis ? "(habis)" : `(${s.stok})`}
-                        </span>
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+              emptyMessage="Belum ada ukuran"
+            />
           </div>
 
           <div className="space-y-1">

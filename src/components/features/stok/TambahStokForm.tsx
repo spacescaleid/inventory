@@ -5,16 +5,10 @@ import { Loader2, Package } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CustomSelect, type SelectOption } from "@/components/shared/CustomSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -33,20 +27,13 @@ const tambahStokSchema = z.object({
     .string()
     .trim()
     .min(1, "Ukuran wajib diisi")
-    .max(
-      INPUT_LIMITS.MAX_UKURAN_LENGTH,
-      `Maksimal ${INPUT_LIMITS.MAX_UKURAN_LENGTH} karakter`
-    ),
+    .max(INPUT_LIMITS.MAX_UKURAN_LENGTH),
   jumlah: z
     .number({ message: "Jumlah harus berupa angka" })
-    .int("Jumlah harus bilangan bulat")
+    .int()
     .min(1, "Minimal 1 unit")
-    .max(INPUT_LIMITS.MAX_STOK, `Maksimal ${INPUT_LIMITS.MAX_STOK} unit`),
-  harga: z
-    .number({ message: "Harga harus berupa angka" })
-    .int("Harga harus bilangan bulat")
-    .min(0, "Harga tidak boleh negatif")
-    .optional(),
+    .max(INPUT_LIMITS.MAX_STOK),
+  harga: z.number().int().min(0).optional(),
 });
 
 type TambahStokFormValues = z.infer<typeof tambahStokSchema>;
@@ -94,15 +81,17 @@ export function TambahStokForm({
     }
   }, [open, jenis, form]);
 
+  const handleSubmit = async (values: TambahStokFormValues) => {
+    await onSubmit(values);
+  };
+
   const jenisIdValue = form.watch("jenisId");
   const ukuranValue = form.watch("ukuran");
   const jumlahValue = form.watch("jumlah");
   const showJenisSelect = !jenis && jenisList.length > 0;
 
-  // Fetch existing items untuk jenis yang dipilih
   const { data: existingItems } = useStockItemsByJenis(jenisIdValue);
 
-  // Cek apakah ukuran sudah ada
   const ukuranPreview = ukuranValue ? normalizeUkuran(ukuranValue) : "";
   const existingItem = useMemo(() => {
     if (!ukuranPreview || !existingItems) return null;
@@ -112,9 +101,17 @@ export function TambahStokForm({
   const showCaseHint =
     ukuranValue && ukuranValue !== ukuranPreview && ukuranValue.length > 0;
 
-  const handleSubmit = async (values: TambahStokFormValues) => {
-    await onSubmit(values);
-  };
+  // Options untuk jenis
+  const jenisOptions = useMemo<SelectOption[]>(
+    () =>
+      jenisList.map((j) => ({
+        value: j.id,
+        label: j.expand?.category?.nama
+          ? `${j.expand.category.nama} — ${j.nama}`
+          : j.nama,
+      })),
+    [jenisList]
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -143,23 +140,14 @@ export function TambahStokForm({
                 Jenis Seragam{" "}
                 <span className="text-[var(--color-danger-500)]">*</span>
               </Label>
-              <Select
+              <CustomSelect
+                id="jenisId"
                 value={jenisIdValue}
-                onValueChange={(v) => form.setValue("jenisId", v)}
-              >
-                <SelectTrigger id="jenisId" className="h-11 w-full">
-                  <SelectValue placeholder="Pilih jenis seragam" />
-                </SelectTrigger>
-                <SelectContent>
-                  {jenisList.map((j) => (
-                    <SelectItem key={j.id} value={j.id}>
-                      {j.expand?.category?.nama
-                        ? `${j.expand.category.nama} — ${j.nama}`
-                        : j.nama}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(v) => form.setValue("jenisId", v)}
+                options={jenisOptions}
+                placeholder="Pilih jenis seragam"
+                aria-invalid={!!form.formState.errors.jenisId}
+              />
               {form.formState.errors.jenisId && (
                 <p className="text-xs text-[var(--color-danger-600)]">
                   ⚠ {form.formState.errors.jenisId.message}
@@ -206,7 +194,6 @@ export function TambahStokForm({
             )}
           </div>
 
-          {/* Info box: ukuran sudah ada → akan increment */}
           {existingItem && (
             <div className="flex items-start gap-2 rounded-lg border border-[var(--color-info-200)] bg-[var(--color-info-50)] p-3">
               <Package className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--color-info-600)]" />
@@ -227,8 +214,7 @@ export function TambahStokForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="jumlah">
-              Jumlah{" "}
-              {existingItem ? "yang Diterima" : ""}{" "}
+              Jumlah {existingItem ? "yang Diterima" : ""}{" "}
               <span className="text-[var(--color-danger-500)]">*</span>
             </Label>
             <Input
@@ -261,11 +247,7 @@ export function TambahStokForm({
                 id="harga"
                 type="number"
                 inputMode="numeric"
-                placeholder={
-                  existingItem?.harga
-                    ? String(existingItem.harga)
-                    : "0"
-                }
+                placeholder={existingItem?.harga ? String(existingItem.harga) : "0"}
                 min={0}
                 className="pl-10"
                 {...form.register("harga", {

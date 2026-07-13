@@ -1,7 +1,3 @@
-/**
- * Query keys factory untuk TanStack Query.
- * Menggunakan hierarchical structure untuk invalidation yang tepat.
- */
 export const queryKeys = {
   all: ["inventory"] as const,
 
@@ -48,6 +44,16 @@ export const queryKeys = {
   classes: {
     all: () => [...queryKeys.all, "classes"] as const,
     list: () => [...queryKeys.classes.all(), "list"] as const,
+  },
+
+  students: {
+    all: () => [...queryKeys.all, "students"] as const,
+    list: (filters?: Record<string, unknown>) =>
+      [...queryKeys.students.all(), "list", filters] as const,
+    detail: (id: string) =>
+      [...queryKeys.students.all(), "detail", id] as const,
+    byClass: (classId: string) =>
+      [...queryKeys.students.all(), "byClass", classId] as const,
   },
 
   transactions: {

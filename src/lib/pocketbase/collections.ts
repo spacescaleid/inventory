@@ -1,7 +1,3 @@
-/**
- * Nama collection di PocketBase.
- * Centralized untuk menghindari typo.
- */
 export const COLLECTIONS = {
   USERS: "users",
   CATEGORIES: "categories",
@@ -11,6 +7,7 @@ export const COLLECTIONS = {
   TRANSACTION_ITEMS: "transaction_items",
   STOCK_LOGS: "stock_logs",
   CLASSES: "classes",
+  STUDENTS: "students",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

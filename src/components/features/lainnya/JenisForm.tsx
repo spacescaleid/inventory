@@ -2,19 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CustomSelect, type SelectOption } from "@/components/shared/CustomSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -73,6 +67,15 @@ export function JenisForm({
 
   const categoryValue = form.watch("category");
 
+  const kategoriOptions = useMemo<SelectOption[]>(
+    () =>
+      kategoris.map((k) => ({
+        value: k.id,
+        label: k.nama,
+      })),
+    [kategoris]
+  );
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -100,21 +103,14 @@ export function JenisForm({
             <Label htmlFor="jenis-kategori">
               Kategori <span className="text-[var(--color-danger-500)]">*</span>
             </Label>
-            <Select
+            <CustomSelect
+              id="jenis-kategori"
               value={categoryValue}
-              onValueChange={(v) => form.setValue("category", v)}
-            >
-              <SelectTrigger id="jenis-kategori" className="h-11 w-full">
-                <SelectValue placeholder="Pilih kategori" />
-              </SelectTrigger>
-              <SelectContent>
-                {kategoris.map((k) => (
-                  <SelectItem key={k.id} value={k.id}>
-                    {k.nama}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => form.setValue("category", v)}
+              options={kategoriOptions}
+              placeholder="Pilih kategori"
+              aria-invalid={!!form.formState.errors.category}
+            />
             {form.formState.errors.category && (
               <p className="text-xs text-[var(--color-danger-600)]">
                 ⚠ {form.formState.errors.category.message}
