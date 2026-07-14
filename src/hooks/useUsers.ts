@@ -11,9 +11,6 @@ interface UserFilterOptions {
   role?: "admin" | "operator" | "all";
 }
 
-/**
- * Payload untuk create user — explicit fields only
- */
 export interface CreateUserPayload {
   username: string;
   email: string;
@@ -22,15 +19,15 @@ export interface CreateUserPayload {
   role: UserRole;
 }
 
-/**
- * Payload untuk update user — TIDAK ADA password/passwordConfirm
- */
 export interface UpdateUserPayload {
   name?: string;
   email?: string;
   role?: UserRole;
   is_active?: boolean;
 }
+
+const PB_URL =
+  process.env.NEXT_PUBLIC_PB_URL || "https://inventory.spacescale.online";
 
 // ============================================
 // Queries
@@ -75,37 +72,60 @@ export function useUser(id: string) {
 }
 
 // ============================================
-// Mutations
+// Mutations (via Raw Fetch — bypass SDK issues)
 // ============================================
 
 /**
- * Create user baru
+ * Create user baru via raw fetch.
+ * TIDAK set field `verified` (dilarang di client-side PocketBase v0.23+).
  */
 export function useCreateUser() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (input: CreateUserPayload) => {
-      // Build clean payload
       const payload = {
         username: input.username.trim().toLowerCase(),
         email: input.email.trim().toLowerCase(),
         name: input.name.trim(),
         password: input.password,
-        passwordConfirm: input.password, // ALWAYS same
+        passwordConfirm: input.password,
         role: input.role,
         is_active: true,
         emailVisibility: false,
-        verified: true,
       };
 
-      console.log("Creating user with payload:", {
+      console.log("[useCreateUser] Sending payload:", {
         ...payload,
         password: "***",
         passwordConfirm: "***",
       });
 
-      return await pb.collection(COLLECTIONS.USERS).create<User>(payload);
+      const response = await fetch(
+        `${PB_URL}/api/collections/users/records`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: pb.authStore.token,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[useCreateUser] Error response:", errorData);
+        throw {
+          status: response.status,
+          data: errorData,
+          message: errorData.message || "Failed to create user",
+          response: errorData,
+        };
+      }
+
+      const data = await response.json();
+      return data as User;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -115,8 +135,8 @@ export function useCreateUser() {
 }
 
 /**
- * Update user — HANYA name, email, role, is_active
- * TIDAK PERNAH kirim password / passwordConfirm
+ * Update user via raw fetch — hanya field yang boleh diubah.
+ * TIDAK PERNAH kirim password / passwordConfirm.
  */
 export function useUpdateUser() {
   const qc = useQueryClient();
@@ -129,25 +149,48 @@ export function useUpdateUser() {
       id: string;
       input: UpdateUserPayload;
     }) => {
-      // Build clean payload — filter undefined/empty
-      const payload: Record<string, unknown> = {};
+      const payload: Record<string, string | boolean> = {};
 
-      if (input.name !== undefined && input.name.trim() !== "") {
+      if (typeof input.name === "string" && input.name.trim() !== "") {
         payload.name = input.name.trim();
       }
-      if (input.email !== undefined && input.email.trim() !== "") {
+      if (typeof input.email === "string" && input.email.trim() !== "") {
         payload.email = input.email.trim().toLowerCase();
       }
-      if (input.role !== undefined) {
+      if (input.role === "admin" || input.role === "operator") {
         payload.role = input.role;
       }
-      if (input.is_active !== undefined) {
+      if (typeof input.is_active === "boolean") {
         payload.is_active = input.is_active;
       }
 
-      console.log("Updating user with payload:", payload);
+      console.log("[useUpdateUser] Sending payload:", payload);
 
-      return await pb.collection(COLLECTIONS.USERS).update<User>(id, payload);
+      const response = await fetch(
+        `${PB_URL}/api/collections/users/records/${id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: pb.authStore.token,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[useUpdateUser] Error response:", errorData);
+        throw {
+          status: response.status,
+          data: errorData,
+          message: errorData.message || "Failed to update user",
+          response: errorData,
+        };
+      }
+
+      const data = await response.json();
+      return data as User;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -157,7 +200,7 @@ export function useUpdateUser() {
 }
 
 /**
- * Reset password user oleh admin
+ * Reset password user via raw fetch.
  */
 export function useResetUserPassword() {
   const qc = useQueryClient();
@@ -172,12 +215,34 @@ export function useResetUserPassword() {
     }) => {
       const payload = {
         password: newPassword,
-        passwordConfirm: newPassword, // ALWAYS same
+        passwordConfirm: newPassword,
       };
 
-      console.log("Resetting password for user:", userId);
+      console.log("[useResetUserPassword] Resetting for:", userId);
 
-      return await pb.collection(COLLECTIONS.USERS).update<User>(userId, payload);
+      const response = await fetch(
+        `${PB_URL}/api/collections/users/records/${userId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: pb.authStore.token,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw {
+          status: response.status,
+          data: errorData,
+          message: errorData.message || "Failed to reset password",
+          response: errorData,
+        };
+      }
+
+      return await response.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -186,16 +251,38 @@ export function useResetUserPassword() {
 }
 
 /**
- * Toggle user active/inactive
+ * Toggle user active/inactive.
  */
 export function useToggleUserActive() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (user: User) => {
-      return await pb.collection(COLLECTIONS.USERS).update<User>(user.id, {
-        is_active: !user.is_active,
-      });
+      const response = await fetch(
+        `${PB_URL}/api/collections/users/records/${user.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: pb.authStore.token,
+          },
+          body: JSON.stringify({
+            is_active: !user.is_active,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw {
+          status: response.status,
+          data: errorData,
+          message: errorData.message || "Failed to toggle active",
+          response: errorData,
+        };
+      }
+
+      return await response.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -204,14 +291,33 @@ export function useToggleUserActive() {
 }
 
 /**
- * Delete user
+ * Delete user.
  */
 export function useDeleteUser() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      await pb.collection(COLLECTIONS.USERS).delete(id);
+      const response = await fetch(
+        `${PB_URL}/api/collections/users/records/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: pb.authStore.token,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw {
+          status: response.status,
+          data: errorData,
+          message: errorData.message || "Failed to delete user",
+          response: errorData,
+        };
+      }
+
       return id;
     },
     onSuccess: () => {
