@@ -54,7 +54,6 @@ export default function LoginPage() {
     if (!isInitialized) init();
   }, [isInitialized, init]);
 
-  // Smart redirect: kalau sudah login, arahkan ke tempat yang benar
   useEffect(() => {
     if (isInitialized && user) {
       if (redirect) {
@@ -73,7 +72,6 @@ export default function LoginPage() {
       toast.success("✓ Berhasil masuk", {
         description: "Selamat datang kembali",
       });
-      // Redirect di-handle oleh useEffect di atas
     } catch (error) {
       const message = error instanceof Error ? error.message : "Login gagal";
       toast.error("Login gagal", { description: message });
@@ -105,7 +103,7 @@ export default function LoginPage() {
             <Input
               id="identity"
               type="text"
-              placeholder="Contoh: admin atau admin@sekolah.id"
+              placeholder="Masukkan email atau username"
               autoComplete="username"
               autoFocus
               {...form.register("identity")}
@@ -170,16 +168,6 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
-
-        <div className="mt-6 rounded-lg bg-[var(--color-info-50)] p-3">
-          <p className="text-xs font-semibold text-[var(--color-info-700)]">
-            💡 Kredensial Demo:
-          </p>
-          <div className="mt-1.5 space-y-0.5 font-mono text-[11px] text-[var(--color-info-600)]">
-            <p>Admin: admin / password123</p>
-            <p>Operator: burina / password123</p>
-          </div>
-        </div>
       </div>
 
       <p className="mt-6 text-center text-xs text-[var(--color-neutral-400)]">
