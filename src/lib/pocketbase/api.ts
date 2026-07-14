@@ -14,7 +14,6 @@ export function parsePocketBaseError(error: unknown): string {
         if (err && typeof err === "object" && "message" in err) {
           const errObj = err as { code?: string; message: string };
 
-          // Map common PocketBase error codes ke Indonesian
           let msg = errObj.message;
 
           if (errObj.code === "validation_not_unique") {
@@ -40,9 +39,18 @@ export function parsePocketBaseError(error: unknown): string {
       }
     }
 
-    // Fallback ke message dari error
-    if (error.response?.message) return error.response.message;
-    if (error.message) return error.message;
+    // Handle common error messages
+    const message = error.response?.message || error.message;
+
+    if (message?.includes("required relation reference")) {
+      return "Data ini masih terhubung dengan data lain (misal: transaksi, riwayat). Nonaktifkan saja untuk menyimpan history.";
+    }
+
+    if (message?.includes("Failed to delete")) {
+      return "Gagal menghapus. Data mungkin masih dipakai di tempat lain.";
+    }
+
+    if (message) return message;
 
     // Status code based
     switch (error.status) {
@@ -71,6 +79,17 @@ export function parsePocketBaseError(error: unknown): string {
 export function isAuthError(error: unknown): boolean {
   if (error instanceof ClientResponseError) {
     return error.status === 401 || error.status === 403;
+  }
+  return false;
+}
+
+/**
+ * Check apakah error karena relasi constraint (data dipakai di tempat lain).
+ */
+export function isRelationConstraintError(error: unknown): boolean {
+  if (error instanceof ClientResponseError) {
+    const message = error.response?.message || error.message || "";
+    return message.includes("required relation reference");
   }
   return false;
 }

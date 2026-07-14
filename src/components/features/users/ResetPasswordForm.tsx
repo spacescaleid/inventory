@@ -19,11 +19,14 @@ import type { User } from "@/types";
 
 const resetPasswordSchema = z
   .object({
-    newPassword: z.string().min(8, "Password minimal 8 karakter").max(72),
-    passwordConfirm: z.string(),
+    newPassword: z
+      .string()
+      .min(8, "Password minimal 8 karakter")
+      .max(72, "Password maksimal 72 karakter"),
+    passwordConfirm: z.string().min(1, "Konfirmasi password wajib diisi"),
   })
   .refine((data) => data.newPassword === data.passwordConfirm, {
-    message: "Password tidak sama",
+    message: "Password dan konfirmasi tidak sama",
     path: ["passwordConfirm"],
   });
 
@@ -48,6 +51,7 @@ export function ResetPasswordForm({
 
   const form = useForm<ResetPasswordValues>({
     resolver: zodResolver(resetPasswordSchema),
+    mode: "onBlur",
     defaultValues: { newPassword: "", passwordConfirm: "" },
   });
 
@@ -137,7 +141,7 @@ export function ResetPasswordForm({
             <Input
               id="passwordConfirmReset"
               type={showPassword ? "text" : "password"}
-              placeholder="Ulangi password"
+              placeholder="Ulangi password yang sama"
               autoComplete="new-password"
               {...form.register("passwordConfirm")}
               aria-invalid={!!form.formState.errors.passwordConfirm}

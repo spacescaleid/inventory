@@ -5,16 +5,10 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CustomSelect, type SelectOption } from "@/components/shared/CustomSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -23,6 +17,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { User, UserRole } from "@/types";
+
+// ============================================
+// Schemas
+// ============================================
 
 const createUserSchema = z
   .object({
@@ -38,12 +36,15 @@ const createUserSchema = z
       .max(30, "Maksimal 30 karakter")
       .regex(/^[a-zA-Z0-9_.]+$/, "Hanya huruf, angka, titik, underscore"),
     email: z.string().trim().email("Format email tidak valid"),
-    password: z.string().min(8, "Password minimal 8 karakter").max(72),
-    passwordConfirm: z.string(),
+    password: z
+      .string()
+      .min(8, "Password minimal 8 karakter")
+      .max(72, "Password maksimal 72 karakter"),
+    passwordConfirm: z.string().min(1, "Konfirmasi password wajib diisi"),
     role: z.enum(["admin", "operator"]),
   })
   .refine((data) => data.password === data.passwordConfirm, {
-    message: "Password tidak sama",
+    message: "Password dan konfirmasi tidak sama",
     path: ["passwordConfirm"],
   });
 
@@ -53,14 +54,19 @@ const editUserSchema = z.object({
   role: z.enum(["admin", "operator"]),
 });
 
-type CreateUserValues = z.infer<typeof createUserSchema>;
-type EditUserValues = z.infer<typeof editUserSchema>;
+export type CreateUserFormValues = z.infer<typeof createUserSchema>;
+export type EditUserFormValues = z.infer<typeof editUserSchema>;
+
+// ============================================
+// Main Component (Router)
+// ============================================
 
 interface UserFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   user?: User | null;
-  onSubmit: (values: CreateUserValues | EditUserValues) => Promise<void> | void;
+  onCreateSubmit: (values: CreateUserFormValues) => Promise<void> | void;
+  onEditSubmit: (values: EditUserFormValues) => Promise<void> | void;
   isLoading?: boolean;
 }
 
@@ -68,46 +74,11 @@ export function UserForm({
   open,
   onOpenChange,
   user,
-  onSubmit,
+  onCreateSubmit,
+  onEditSubmit,
   isLoading,
 }: UserFormProps) {
   const isEdit = !!user;
-  const [showPassword, setShowPassword] = useState(false);
-
-  const createForm = useForm<CreateUserValues>({
-    resolver: zodResolver(createUserSchema),
-    defaultValues: {
-      name: "",
-      username: "",
-      email: "",
-      password: "",
-      passwordConfirm: "",
-      role: "operator",
-    },
-  });
-
-  const editForm = useForm<EditUserValues>({
-    resolver: zodResolver(editUserSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      role: "operator",
-    },
-  });
-
-  useEffect(() => {
-    if (open) {
-      if (user) {
-        editForm.reset({
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        });
-      } else {
-        createForm.reset();
-      }
-    }
-  }, [open, user, createForm, editForm]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -130,19 +101,18 @@ export function UserForm({
 
         {isEdit ? (
           <EditForm
-            form={editForm}
-            onSubmit={onSubmit}
+            key={`edit-${user.id}`}
+            user={user}
+            onSubmit={onEditSubmit}
             onCancel={() => onOpenChange(false)}
             isLoading={isLoading}
           />
         ) : (
           <CreateForm
-            form={createForm}
-            onSubmit={onSubmit}
+            key={open ? "create-open" : "create-closed"}
+            onSubmit={onCreateSubmit}
             onCancel={() => onOpenChange(false)}
             isLoading={isLoading}
-            showPassword={showPassword}
-            onTogglePassword={() => setShowPassword((v) => !v)}
           />
         )}
       </SheetContent>
@@ -154,24 +124,50 @@ export function UserForm({
 // Create Form
 // ============================================
 function CreateForm({
-  form,
   onSubmit,
   onCancel,
   isLoading,
-  showPassword,
-  onTogglePassword,
 }: {
-  form: ReturnType<typeof useForm<CreateUserValues>>;
-  onSubmit: (values: CreateUserValues) => void | Promise<void>;
+  onSubmit: (values: CreateUserFormValues) => void | Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
-  showPassword: boolean;
-  onTogglePassword: () => void;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
+  const form = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
+    mode: "onBlur",
+    defaultValues: {
+      name: "",
+      username: "",
+      email: "",
+      password: "",
+      passwordConfirm: "",
+      role: "operator",
+    },
+  });
+
   const role = form.watch("role");
 
+  const roleOptions: SelectOption[] = [
+    { value: "operator", label: "Operator" },
+    { value: "admin", label: "Admin" },
+  ];
+
+  const handleFormSubmit = async (values: CreateUserFormValues) => {
+    console.log("[UserForm] Submit create with values:", {
+      ...values,
+      password: "***",
+      passwordConfirm: "***",
+    });
+    await onSubmit(values);
+  };
+
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="mt-6 space-y-4">
+    <form
+      onSubmit={form.handleSubmit(handleFormSubmit)}
+      className="mt-6 space-y-4"
+    >
       <div className="space-y-1.5">
         <Label htmlFor="name">
           Nama Lengkap <span className="text-[var(--color-danger-500)]">*</span>
@@ -212,18 +208,13 @@ function CreateForm({
           <Label htmlFor="role">
             Peran <span className="text-[var(--color-danger-500)]">*</span>
           </Label>
-          <Select
+          <CustomSelect
+            id="role"
             value={role}
-            onValueChange={(v) => form.setValue("role", v as UserRole)}
-          >
-            <SelectTrigger id="role" className="h-11 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="operator">Operator</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-            </SelectContent>
-          </Select>
+            onChange={(v) => form.setValue("role", v as UserRole)}
+            options={roleOptions}
+            placeholder="Pilih peran"
+          />
         </div>
       </div>
 
@@ -234,7 +225,7 @@ function CreateForm({
         <Input
           id="email"
           type="email"
-          placeholder="user@sekolah.id"
+          placeholder="user@sekolah.local"
           {...form.register("email")}
           aria-invalid={!!form.formState.errors.email}
         />
@@ -261,7 +252,7 @@ function CreateForm({
           />
           <button
             type="button"
-            onClick={onTogglePassword}
+            onClick={() => setShowPassword((v) => !v)}
             aria-label="Toggle password"
             className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--color-neutral-400)] transition-colors hover:bg-[var(--color-neutral-100)] hover:text-[var(--color-neutral-600)]"
           >
@@ -287,7 +278,7 @@ function CreateForm({
         <Input
           id="passwordConfirm"
           type={showPassword ? "text" : "password"}
-          placeholder="Ulangi password"
+          placeholder="Ulangi password yang sama"
           autoComplete="new-password"
           {...form.register("passwordConfirm")}
           aria-invalid={!!form.formState.errors.passwordConfirm}
@@ -334,20 +325,51 @@ function CreateForm({
 // Edit Form
 // ============================================
 function EditForm({
-  form,
+  user,
   onSubmit,
   onCancel,
   isLoading,
 }: {
-  form: ReturnType<typeof useForm<EditUserValues>>;
-  onSubmit: (values: EditUserValues) => void | Promise<void>;
+  user: User;
+  onSubmit: (values: EditUserFormValues) => void | Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
 }) {
+  const form = useForm<EditUserFormValues>({
+    resolver: zodResolver(editUserSchema),
+    mode: "onBlur",
+    defaultValues: {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  });
+
+  useEffect(() => {
+    form.reset({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
+  }, [user, form]);
+
   const role = form.watch("role");
 
+  const roleOptions: SelectOption[] = [
+    { value: "operator", label: "Operator" },
+    { value: "admin", label: "Admin" },
+  ];
+
+  const handleFormSubmit = async (values: EditUserFormValues) => {
+    console.log("[UserForm] Submit edit with values:", values);
+    await onSubmit(values);
+  };
+
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="mt-6 space-y-4">
+    <form
+      onSubmit={form.handleSubmit(handleFormSubmit)}
+      className="mt-6 space-y-4"
+    >
       <div className="space-y-1.5">
         <Label htmlFor="edit-name">
           Nama Lengkap <span className="text-[var(--color-danger-500)]">*</span>
@@ -383,18 +405,13 @@ function EditForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="edit-role">Peran</Label>
-        <Select
+        <CustomSelect
+          id="edit-role"
           value={role}
-          onValueChange={(v) => form.setValue("role", v as UserRole)}
-        >
-          <SelectTrigger id="edit-role" className="h-11 w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="operator">Operator</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
-        </Select>
+          onChange={(v) => form.setValue("role", v as UserRole)}
+          options={roleOptions}
+          placeholder="Pilih peran"
+        />
         <p className="text-xs text-[var(--color-neutral-500)]">
           Admin dapat kelola user & data master. Operator hanya mencatat
           pengambilan.

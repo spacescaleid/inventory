@@ -4,7 +4,11 @@ import { Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ResetPasswordForm } from "@/components/features/users/ResetPasswordForm";
-import { UserForm } from "@/components/features/users/UserForm";
+import {
+  UserForm,
+  type CreateUserFormValues,
+  type EditUserFormValues,
+} from "@/components/features/users/UserForm";
 import { UserList } from "@/components/features/users/UserList";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -21,17 +25,13 @@ import {
   useUpdateUser,
   useUsers,
 } from "@/hooks/useUsers";
-import { parsePocketBaseError } from "@/lib/pocketbase/api";
-import type { CreateUserInput, UpdateUserInput, User } from "@/types";
+import {
+  isRelationConstraintError,
+  parsePocketBaseError,
+} from "@/lib/pocketbase/api";
+import type { User } from "@/types";
 
 type RoleFilter = "all" | "admin" | "operator";
-
-// Type guard untuk cek input adalah CreateUserInput
-function isCreateInput(
-  input: CreateUserInput | UpdateUserInput
-): input is CreateUserInput {
-  return "password" in input && "username" in input;
-}
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth({
@@ -108,42 +108,55 @@ export default function AdminUsersPage() {
     setDeleteConfirmOpen(true);
   };
 
-  const handleUserSubmit = async (
-    values: CreateUserInput | UpdateUserInput
-  ) => {
+  // ============================================
+  // Create User Handler
+  // ============================================
+  const handleCreateSubmit = async (values: CreateUserFormValues) => {
     try {
-      if (selectedUser) {
-        // Update mode
-        await updateMutation.mutateAsync({
-          id: selectedUser.id,
-          input: values as UpdateUserInput,
-        });
-        toast.success("✓ User berhasil diperbarui");
-      } else if (isCreateInput(values)) {
-        // Create mode — pakai type guard supaya TypeScript tahu ini CreateUserInput
-        await createMutation.mutateAsync({
-          username: values.username,
-          email: values.email,
-          name: values.name,
-          password: values.password,
-          passwordConfirm: values.passwordConfirm || values.password,
-          role: values.role,
-          is_active: values.is_active,
-        });
-        toast.success("✓ User baru berhasil ditambahkan", {
-          description: `${values.name} (${values.username}) dapat login sekarang`,
-        });
-      } else {
-        throw new Error("Invalid form data");
-      }
+      await createMutation.mutateAsync({
+        name: values.name,
+        username: values.username,
+        email: values.email,
+        password: values.password,
+        role: values.role,
+      });
+      toast.success("✓ User baru berhasil ditambahkan", {
+        description: `${values.name} (${values.username}) dapat login sekarang`,
+      });
       setUserFormOpen(false);
     } catch (err) {
-      toast.error("Gagal menyimpan user", {
+      toast.error("Gagal menambah user", {
         description: parsePocketBaseError(err),
       });
     }
   };
 
+  // ============================================
+  // Edit User Handler
+  // ============================================
+  const handleEditSubmit = async (values: EditUserFormValues) => {
+    if (!selectedUser) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: selectedUser.id,
+        input: {
+          name: values.name,
+          email: values.email,
+          role: values.role,
+        },
+      });
+      toast.success("✓ User berhasil diperbarui");
+      setUserFormOpen(false);
+    } catch (err) {
+      toast.error("Gagal update user", {
+        description: parsePocketBaseError(err),
+      });
+    }
+  };
+
+  // ============================================
+  // Reset Password Handler
+  // ============================================
   const handleResetPasswordSubmit = async (values: {
     newPassword: string;
     passwordConfirm: string;
@@ -153,7 +166,6 @@ export default function AdminUsersPage() {
       await resetPasswordMutation.mutateAsync({
         userId: selectedUser.id,
         newPassword: values.newPassword,
-        passwordConfirm: values.passwordConfirm,
       });
       toast.success("✓ Password berhasil direset", {
         description: `Sampaikan password baru ke ${selectedUser.name}`,
@@ -166,6 +178,9 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ============================================
+  // Delete User Handler
+  // ============================================
   const handleConfirmDelete = async () => {
     if (!selectedUser) return;
     try {
@@ -173,12 +188,39 @@ export default function AdminUsersPage() {
       toast.success("✓ User berhasil dihapus");
       setDeleteConfirmOpen(false);
     } catch (err) {
-      toast.error("Gagal menghapus user", {
-        description: parsePocketBaseError(err),
-      });
+      if (isRelationConstraintError(err)) {
+        setDeleteConfirmOpen(false);
+        toast.error("User tidak bisa dihapus", {
+          description:
+            "User ini sudah punya riwayat transaksi. Nonaktifkan saja agar riwayat tetap tersimpan.",
+          action: {
+            label: "Nonaktifkan",
+            onClick: async () => {
+              try {
+                if (selectedUser.is_active) {
+                  await toggleActiveMutation.mutateAsync(selectedUser);
+                  toast.success(`✓ Akun ${selectedUser.name} dinonaktifkan`);
+                } else {
+                  toast.info("Akun sudah nonaktif");
+                }
+              } catch {
+                toast.error("Gagal menonaktifkan");
+              }
+            },
+          },
+          duration: 8000,
+        });
+      } else {
+        toast.error("Gagal menghapus user", {
+          description: parsePocketBaseError(err),
+        });
+      }
     }
   };
 
+  // ============================================
+  // Toggle Active Handler
+  // ============================================
   const handleConfirmToggle = async () => {
     if (!selectedUser) return;
     try {
@@ -268,7 +310,8 @@ export default function AdminUsersPage() {
         open={userFormOpen}
         onOpenChange={setUserFormOpen}
         user={selectedUser}
-        onSubmit={handleUserSubmit}
+        onCreateSubmit={handleCreateSubmit}
+        onEditSubmit={handleEditSubmit}
         isLoading={isSubmitting}
       />
 
@@ -288,6 +331,12 @@ export default function AdminUsersPage() {
           <>
             User <strong>{selectedUser?.name}</strong> ({selectedUser?.username})
             akan dihapus permanen.
+            <br />
+            <br />
+            <span className="text-xs text-[var(--color-neutral-500)]">
+              💡 Kalau user sudah punya riwayat transaksi, lebih baik
+              dinonaktifkan saja agar riwayat tetap tersimpan.
+            </span>
           </>
         }
         confirmLabel="Ya, Hapus"

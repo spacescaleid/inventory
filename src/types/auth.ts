@@ -19,6 +19,7 @@ export interface LoginInput {
   password: string;
 }
 
+// Legacy — untuk kompatibilitas import lain
 export interface CreateUserInput {
   email: string;
   username: string;

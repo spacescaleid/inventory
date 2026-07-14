@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import pb from "@/lib/pocketbase/client";
 import { COLLECTIONS } from "@/lib/pocketbase/collections";
 import { queryKeys } from "@/constants/query-keys";
-import type { User, CreateUserInput, UpdateUserInput } from "@/types";
+import type { User, UserRole } from "@/types";
 
 interface UserFilterOptions {
   search?: string;
@@ -12,8 +12,30 @@ interface UserFilterOptions {
 }
 
 /**
- * List semua users (admin only)
+ * Payload untuk create user — explicit fields only
  */
+export interface CreateUserPayload {
+  username: string;
+  email: string;
+  name: string;
+  password: string;
+  role: UserRole;
+}
+
+/**
+ * Payload untuk update user — TIDAK ADA password/passwordConfirm
+ */
+export interface UpdateUserPayload {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  is_active?: boolean;
+}
+
+// ============================================
+// Queries
+// ============================================
+
 export function useUsers(options: UserFilterOptions = {}) {
   return useQuery({
     queryKey: queryKeys.users.list({
@@ -42,9 +64,6 @@ export function useUsers(options: UserFilterOptions = {}) {
   });
 }
 
-/**
- * Get user by ID
- */
 export function useUser(id: string) {
   return useQuery({
     queryKey: queryKeys.users.detail(id),
@@ -55,25 +74,38 @@ export function useUser(id: string) {
   });
 }
 
+// ============================================
+// Mutations
+// ============================================
+
 /**
- * Create user baru (admin only)
+ * Create user baru
  */
 export function useCreateUser() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: CreateUserInput) => {
-      return await pb.collection(COLLECTIONS.USERS).create<User>({
-        username: input.username.trim(),
-        email: input.email.trim(),
+    mutationFn: async (input: CreateUserPayload) => {
+      // Build clean payload
+      const payload = {
+        username: input.username.trim().toLowerCase(),
+        email: input.email.trim().toLowerCase(),
         name: input.name.trim(),
         password: input.password,
-        passwordConfirm: input.passwordConfirm,
+        passwordConfirm: input.password, // ALWAYS same
         role: input.role,
-        is_active: input.is_active ?? true,
+        is_active: true,
         emailVisibility: false,
         verified: true,
+      };
+
+      console.log("Creating user with payload:", {
+        ...payload,
+        password: "***",
+        passwordConfirm: "***",
       });
+
+      return await pb.collection(COLLECTIONS.USERS).create<User>(payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -83,7 +115,8 @@ export function useCreateUser() {
 }
 
 /**
- * Update user (nama, email, role, is_active)
+ * Update user — HANYA name, email, role, is_active
+ * TIDAK PERNAH kirim password / passwordConfirm
  */
 export function useUpdateUser() {
   const qc = useQueryClient();
@@ -94,9 +127,27 @@ export function useUpdateUser() {
       input,
     }: {
       id: string;
-      input: UpdateUserInput;
+      input: UpdateUserPayload;
     }) => {
-      return await pb.collection(COLLECTIONS.USERS).update<User>(id, input);
+      // Build clean payload — filter undefined/empty
+      const payload: Record<string, unknown> = {};
+
+      if (input.name !== undefined && input.name.trim() !== "") {
+        payload.name = input.name.trim();
+      }
+      if (input.email !== undefined && input.email.trim() !== "") {
+        payload.email = input.email.trim().toLowerCase();
+      }
+      if (input.role !== undefined) {
+        payload.role = input.role;
+      }
+      if (input.is_active !== undefined) {
+        payload.is_active = input.is_active;
+      }
+
+      console.log("Updating user with payload:", payload);
+
+      return await pb.collection(COLLECTIONS.USERS).update<User>(id, payload);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -106,7 +157,7 @@ export function useUpdateUser() {
 }
 
 /**
- * Reset password user (admin only)
+ * Reset password user oleh admin
  */
 export function useResetUserPassword() {
   const qc = useQueryClient();
@@ -115,16 +166,18 @@ export function useResetUserPassword() {
     mutationFn: async ({
       userId,
       newPassword,
-      passwordConfirm,
     }: {
       userId: string;
       newPassword: string;
-      passwordConfirm: string;
     }) => {
-      return await pb.collection(COLLECTIONS.USERS).update<User>(userId, {
+      const payload = {
         password: newPassword,
-        passwordConfirm: passwordConfirm,
-      });
+        passwordConfirm: newPassword, // ALWAYS same
+      };
+
+      console.log("Resetting password for user:", userId);
+
+      return await pb.collection(COLLECTIONS.USERS).update<User>(userId, payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
@@ -151,7 +204,7 @@ export function useToggleUserActive() {
 }
 
 /**
- * Delete user (admin only, tidak bisa hapus diri sendiri)
+ * Delete user
  */
 export function useDeleteUser() {
   const qc = useQueryClient();
