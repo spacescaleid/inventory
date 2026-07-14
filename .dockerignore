@@ -1,0 +1,40 @@
+# Node
+node_modules
+npm-debug.log
+
+# Next.js
+.next
+out
+
+# Environment files (JANGAN masuk image)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs & config
+README.md
+design.md
+CLAUDE.md
+AGENTS.md
+LICENSE
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.log
