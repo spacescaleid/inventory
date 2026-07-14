@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ResetPasswordForm } from "@/components/features/users/ResetPasswordForm";
@@ -8,14 +8,30 @@ import { UserForm } from "@/components/features/users/UserForm";
 import { UserList } from "@/components/features/users/UserList";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { FilterChips } from "@/components/shared/FilterChips";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { searchMockUsers } from "@/lib/mock-users";
-import type { User } from "@/types";
+import {
+  useCreateUser,
+  useDeleteUser,
+  useResetUserPassword,
+  useToggleUserActive,
+  useUpdateUser,
+  useUsers,
+} from "@/hooks/useUsers";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
+import type { CreateUserInput, UpdateUserInput, User } from "@/types";
 
 type RoleFilter = "all" | "admin" | "operator";
+
+// Type guard untuk cek input adalah CreateUserInput
+function isCreateInput(
+  input: CreateUserInput | UpdateUserInput
+): input is CreateUserInput {
+  return "password" in input && "username" in input;
+}
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth({
@@ -32,11 +48,37 @@ export default function AdminUsersPage() {
   const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const users = useMemo(
-    () => searchMockUsers(search, roleFilter),
-    [search, roleFilter]
+  const {
+    data: users,
+    isLoading,
+    error,
+    refetch,
+  } = useUsers({
+    search,
+    role: roleFilter,
+  });
+
+  const createMutation = useCreateUser();
+  const updateMutation = useUpdateUser();
+  const deleteMutation = useDeleteUser();
+  const resetPasswordMutation = useResetUserPassword();
+  const toggleActiveMutation = useToggleUserActive();
+
+  const isSubmitting = useMemo(
+    () =>
+      createMutation.isPending ||
+      updateMutation.isPending ||
+      deleteMutation.isPending ||
+      resetPasswordMutation.isPending ||
+      toggleActiveMutation.isPending,
+    [
+      createMutation.isPending,
+      updateMutation.isPending,
+      deleteMutation.isPending,
+      resetPasswordMutation.isPending,
+      toggleActiveMutation.isPending,
+    ]
   );
 
   if (!currentUser) return null;
@@ -66,21 +108,39 @@ export default function AdminUsersPage() {
     setDeleteConfirmOpen(true);
   };
 
-  const handleUserSubmit = async (values: unknown) => {
-    setIsSubmitting(true);
+  const handleUserSubmit = async (
+    values: CreateUserInput | UpdateUserInput
+  ) => {
     try {
-      console.log(selectedUser ? "Update user:" : "Create user:", values);
-      await new Promise((r) => setTimeout(r, 600));
-      toast.success(
-        selectedUser
-          ? "✓ User berhasil diperbarui"
-          : "✓ User baru berhasil ditambahkan"
-      );
+      if (selectedUser) {
+        // Update mode
+        await updateMutation.mutateAsync({
+          id: selectedUser.id,
+          input: values as UpdateUserInput,
+        });
+        toast.success("✓ User berhasil diperbarui");
+      } else if (isCreateInput(values)) {
+        // Create mode — pakai type guard supaya TypeScript tahu ini CreateUserInput
+        await createMutation.mutateAsync({
+          username: values.username,
+          email: values.email,
+          name: values.name,
+          password: values.password,
+          passwordConfirm: values.passwordConfirm || values.password,
+          role: values.role,
+          is_active: values.is_active,
+        });
+        toast.success("✓ User baru berhasil ditambahkan", {
+          description: `${values.name} (${values.username}) dapat login sekarang`,
+        });
+      } else {
+        throw new Error("Invalid form data");
+      }
       setUserFormOpen(false);
-    } catch {
-      toast.error("Gagal menyimpan user");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      toast.error("Gagal menyimpan user", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
@@ -88,51 +148,51 @@ export default function AdminUsersPage() {
     newPassword: string;
     passwordConfirm: string;
   }) => {
-    setIsSubmitting(true);
+    if (!selectedUser) return;
     try {
-      console.log("Reset password:", selectedUser?.id, values);
-      await new Promise((r) => setTimeout(r, 600));
+      await resetPasswordMutation.mutateAsync({
+        userId: selectedUser.id,
+        newPassword: values.newPassword,
+        passwordConfirm: values.passwordConfirm,
+      });
       toast.success("✓ Password berhasil direset", {
-        description: `Sampaikan password baru ke ${selectedUser?.name}`,
+        description: `Sampaikan password baru ke ${selectedUser.name}`,
       });
       setResetPasswordOpen(false);
-    } catch {
-      toast.error("Gagal reset password");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      toast.error("Gagal reset password", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!selectedUser) return;
-    setIsSubmitting(true);
     try {
-      console.log("Delete:", selectedUser.id);
-      await new Promise((r) => setTimeout(r, 500));
+      await deleteMutation.mutateAsync(selectedUser.id);
       toast.success("✓ User berhasil dihapus");
       setDeleteConfirmOpen(false);
-    } catch {
-      toast.error("Gagal menghapus user");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      toast.error("Gagal menghapus user", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
   const handleConfirmToggle = async () => {
     if (!selectedUser) return;
-    setIsSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await toggleActiveMutation.mutateAsync(selectedUser);
       toast.success(
         selectedUser.is_active
           ? `✓ Akun ${selectedUser.name} dinonaktifkan`
           : `✓ Akun ${selectedUser.name} diaktifkan`
       );
       setToggleConfirmOpen(false);
-    } catch {
-      toast.error("Gagal mengubah status");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      toast.error("Gagal mengubah status", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
@@ -177,20 +237,31 @@ export default function AdminUsersPage() {
         <div className="px-1 text-xs text-[var(--color-neutral-500)]">
           Total{" "}
           <strong className="text-[var(--color-neutral-700)]">
-            {users.length}
+            {users?.length ?? 0}
           </strong>{" "}
           user
         </div>
 
-        <UserList
-          users={users}
-          currentUserId={currentUser.id}
-          onEdit={handleEdit}
-          onResetPassword={handleResetPassword}
-          onToggleActive={handleToggleActive}
-          onDelete={handleDelete}
-          onAdd={handleAdd}
-        />
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--color-primary-500)]" />
+          </div>
+        ) : error ? (
+          <ErrorState
+            description={parsePocketBaseError(error)}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <UserList
+            users={users ?? []}
+            currentUserId={currentUser.id}
+            onEdit={handleEdit}
+            onResetPassword={handleResetPassword}
+            onToggleActive={handleToggleActive}
+            onDelete={handleDelete}
+            onAdd={handleAdd}
+          />
+        )}
       </div>
 
       <UserForm
@@ -206,7 +277,7 @@ export default function AdminUsersPage() {
         onOpenChange={setResetPasswordOpen}
         user={selectedUser}
         onSubmit={handleResetPasswordSubmit}
-        isLoading={isSubmitting}
+        isLoading={resetPasswordMutation.isPending}
       />
 
       <ConfirmDialog
@@ -221,7 +292,7 @@ export default function AdminUsersPage() {
         }
         confirmLabel="Ya, Hapus"
         onConfirm={handleConfirmDelete}
-        isLoading={isSubmitting}
+        isLoading={deleteMutation.isPending}
         variant="danger"
       />
 
@@ -236,9 +307,11 @@ export default function AdminUsersPage() {
             ? `Akun ${selectedUser?.name} tidak akan bisa login.`
             : `Akun ${selectedUser?.name} akan bisa login kembali.`
         }
-        confirmLabel={selectedUser?.is_active ? "Ya, Nonaktifkan" : "Ya, Aktifkan"}
+        confirmLabel={
+          selectedUser?.is_active ? "Ya, Nonaktifkan" : "Ya, Aktifkan"
+        }
         onConfirm={handleConfirmToggle}
-        isLoading={isSubmitting}
+        isLoading={toggleActiveMutation.isPending}
         variant={selectedUser?.is_active ? "danger" : "default"}
       />
     </>

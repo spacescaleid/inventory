@@ -2,7 +2,7 @@
 
 import type { Transaksi, TransactionItem } from "@/types";
 import { formatLabelGrupTanggal } from "@/utils/date";
-import { groupTransactionsByDate } from "@/lib/mock-data";
+import { groupTransactionsByDate } from "@/utils/transaksi";
 import { RiwayatCard } from "./RiwayatCard";
 
 interface RiwayatListProps {
@@ -12,7 +12,6 @@ interface RiwayatListProps {
 
 /**
  * List riwayat grouped by tanggal.
- * Header per tanggal: "Hari ini", "Kemarin", atau tanggal lengkap.
  */
 export function RiwayatList({ transactions, onItemClick }: RiwayatListProps) {
   const grouped = groupTransactionsByDate(transactions);
@@ -21,7 +20,6 @@ export function RiwayatList({ transactions, onItemClick }: RiwayatListProps) {
     <div className="space-y-6">
       {grouped.map(({ date, items }) => (
         <section key={date}>
-          {/* Section header */}
           <div className="mb-3 flex items-center gap-2 px-1">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
               {formatLabelGrupTanggal(date)}
@@ -32,7 +30,6 @@ export function RiwayatList({ transactions, onItemClick }: RiwayatListProps) {
             </span>
           </div>
 
-          {/* Cards */}
           <div className="space-y-2">
             {items.map((trx) => (
               <RiwayatCard

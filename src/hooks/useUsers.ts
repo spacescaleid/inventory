@@ -16,7 +16,10 @@ interface UserFilterOptions {
  */
 export function useUsers(options: UserFilterOptions = {}) {
   return useQuery({
-    queryKey: queryKeys.users.list(options),
+    queryKey: queryKeys.users.list({
+      search: options.search,
+      role: options.role,
+    }),
     queryFn: async () => {
       const filters: string[] = [];
 
@@ -69,7 +72,7 @@ export function useCreateUser() {
         role: input.role,
         is_active: input.is_active ?? true,
         emailVisibility: false,
-        verified: true, // Auto-verify karena dibuat admin
+        verified: true,
       });
     },
     onSuccess: () => {
@@ -104,7 +107,6 @@ export function useUpdateUser() {
 
 /**
  * Reset password user (admin only)
- * PocketBase butuh oldPassword atau special API - kita pakai admin API
  */
 export function useResetUserPassword() {
   const qc = useQueryClient();
@@ -119,8 +121,6 @@ export function useResetUserPassword() {
       newPassword: string;
       passwordConfirm: string;
     }) => {
-      // Untuk MVP: kita pakai update biasa (butuh admin token / superuser)
-      // Note: Ini akan bekerja karena API Rules kita allow admin update anyone
       return await pb.collection(COLLECTIONS.USERS).update<User>(userId, {
         password: newPassword,
         passwordConfirm: passwordConfirm,

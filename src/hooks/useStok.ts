@@ -116,9 +116,6 @@ export function useStokGrouped() {
   });
 }
 
-/**
- * Result dari upsert stock (create baru atau increment existing)
- */
 export interface UpsertStockResult {
   action: "created" | "incremented";
   item: StockItem;
@@ -131,10 +128,6 @@ export interface UpsertStockResult {
  * Smart create/increment stock:
  * - Kalau ukuran belum ada → CREATE baru
  * - Kalau ukuran sudah ada → INCREMENT stok existing
- *
- * Ini yang biasa dipakai di aplikasi inventory real.
- * Kondisi: kalau kamu terima 5 unit "XL" dan sudah ada "XL" 3 unit,
- * total jadi 8 unit (bukan create record baru).
  */
 export function useUpsertStock() {
   const qc = useQueryClient();
@@ -144,7 +137,6 @@ export function useUpsertStock() {
       const user = getCurrentUser();
       const ukuranNormalized = normalizeUkuran(input.ukuran);
 
-      // Cek existing
       const existing = await pb
         .collection(COLLECTIONS.STOCK_ITEMS)
         .getFullList<StockItem>({
@@ -152,7 +144,6 @@ export function useUpsertStock() {
         });
 
       if (existing.length > 0) {
-        // INCREMENT existing
         const current = existing[0];
         const stokSebelum = current.stok;
         const stokSesudah = stokSebelum + input.stok;
@@ -162,7 +153,6 @@ export function useUpsertStock() {
           stok_awal: (current.stok_awal ?? 0) + input.stok,
         };
 
-        // Update harga kalau dikirim
         if (input.harga !== undefined && input.harga > 0) {
           updatePayload.harga = input.harga;
         }
@@ -171,7 +161,6 @@ export function useUpsertStock() {
           .collection(COLLECTIONS.STOCK_ITEMS)
           .update<StockItem>(current.id, updatePayload);
 
-        // Log stock masuk
         if (user) {
           try {
             await pb.collection(COLLECTIONS.STOCK_LOGS).create({
@@ -197,7 +186,6 @@ export function useUpsertStock() {
         };
       }
 
-      // CREATE baru
       const payload: Record<string, unknown> = {
         uniform_type: input.uniform_type,
         ukuran: ukuranNormalized,
@@ -213,7 +201,6 @@ export function useUpsertStock() {
         .collection(COLLECTIONS.STOCK_ITEMS)
         .create<StockItem>(payload);
 
-      // Log stock masuk (initial)
       if (user) {
         try {
           await pb.collection(COLLECTIONS.STOCK_LOGS).create({
@@ -246,10 +233,6 @@ export function useUpsertStock() {
   });
 }
 
-/**
- * @deprecated Gunakan useUpsertStock untuk experience yang lebih baik.
- * Kept untuk backwards compatibility.
- */
 export function useCreateStockItem() {
   const qc = useQueryClient();
 
@@ -291,9 +274,6 @@ export function useCreateStockItem() {
   });
 }
 
-/**
- * Update stock item
- */
 export function useUpdateStockItem() {
   const qc = useQueryClient();
 
@@ -342,9 +322,6 @@ export function useUpdateStockItem() {
   });
 }
 
-/**
- * Delete stock item
- */
 export function useDeleteStockItem() {
   const qc = useQueryClient();
 

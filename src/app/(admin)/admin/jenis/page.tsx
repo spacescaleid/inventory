@@ -1,14 +1,22 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { JenisForm } from "@/components/features/lainnya/JenisForm";
 import { JenisList } from "@/components/features/lainnya/JenisList";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { mockJenis, mockKategoris } from "@/lib/mock-data";
+import { useCategories } from "@/hooks/useCategories";
+import {
+  useCreateUniformType,
+  useDeleteUniformType,
+  useUniformTypes,
+  useUpdateUniformType,
+} from "@/hooks/useJenis";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
 import type { JenisSeragam } from "@/types";
 
 export default function AdminJenisPage() {
@@ -16,7 +24,18 @@ export default function AdminJenisPage() {
   const [selectedJenis, setSelectedJenis] = useState<JenisSeragam | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [jenisToDelete, setJenisToDelete] = useState<JenisSeragam | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+
+  const { data: kategoris } = useCategories();
+  const {
+    data: jenisList,
+    isLoading,
+    error,
+    refetch,
+  } = useUniformTypes();
+
+  const createMutation = useCreateUniformType();
+  const updateMutation = useUpdateUniformType();
+  const deleteMutation = useDeleteUniformType();
 
   const handleAdd = () => {
     setSelectedJenis(null);
@@ -37,37 +56,40 @@ export default function AdminJenisPage() {
     category: string;
     nama: string;
   }) => {
-    setIsLoading(true);
     try {
-      console.log(selectedJenis ? "Update:" : "Create:", values);
-      await new Promise((r) => setTimeout(r, 500));
-      toast.success(
-        selectedJenis
-          ? "✓ Jenis berhasil diperbarui"
-          : "✓ Jenis berhasil ditambahkan"
-      );
+      if (selectedJenis) {
+        await updateMutation.mutateAsync({
+          id: selectedJenis.id,
+          input: values,
+        });
+        toast.success("✓ Jenis berhasil diperbarui");
+      } else {
+        await createMutation.mutateAsync(values);
+        toast.success("✓ Jenis berhasil ditambahkan");
+      }
       setFormOpen(false);
-    } catch {
-      toast.error("Gagal menyimpan jenis");
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      toast.error("Gagal menyimpan jenis", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!jenisToDelete) return;
-    setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await deleteMutation.mutateAsync(jenisToDelete.id);
       toast.success("✓ Jenis berhasil dihapus");
       setDeleteConfirmOpen(false);
       setJenisToDelete(null);
-    } catch {
-      toast.error("Gagal menghapus jenis");
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      toast.error("Gagal menghapus jenis", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   return (
     <>
@@ -87,22 +109,33 @@ export default function AdminJenisPage() {
           Jenis seragam di dalam setiap kategori (Baju, Celana, Rok, Topi).
         </p>
 
-        <JenisList
-          jenisList={mockJenis}
-          kategoris={mockKategoris}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onAdd={handleAdd}
-        />
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--color-primary-500)]" />
+          </div>
+        ) : error ? (
+          <ErrorState
+            description={parsePocketBaseError(error)}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <JenisList
+            jenisList={jenisList ?? []}
+            kategoris={kategoris ?? []}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAdd={handleAdd}
+          />
+        )}
       </div>
 
       <JenisForm
         open={formOpen}
         onOpenChange={setFormOpen}
         jenis={selectedJenis}
-        kategoris={mockKategoris}
+        kategoris={kategoris ?? []}
         onSubmit={handleSubmit}
-        isLoading={isLoading}
+        isLoading={isSubmitting}
       />
 
       <ConfirmDialog
@@ -117,7 +150,7 @@ export default function AdminJenisPage() {
         }
         confirmLabel="Ya, Hapus"
         onConfirm={handleConfirmDelete}
-        isLoading={isLoading}
+        isLoading={deleteMutation.isPending}
         variant="danger"
       />
     </>

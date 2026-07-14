@@ -26,12 +26,8 @@ interface RiwayatFilterOptions {
   dateTo?: string | null;
 }
 
-/**
- * Build filter string berdasarkan opsi
- */
 function buildFilter(options: RiwayatFilterOptions): string {
   const filters: string[] = [];
-
   const now = new Date();
 
   if (options.periode === "hari-ini") {
@@ -40,7 +36,11 @@ function buildFilter(options: RiwayatFilterOptions): string {
   } else if (options.periode === "minggu-ini") {
     const dayOfWeek = now.getDay();
     const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
     startOfWeek.setDate(startOfWeek.getDate() - daysToMonday);
     filters.push(`created >= "${startOfWeek.toISOString()}"`);
   } else if (options.periode === "bulan-ini") {
@@ -68,7 +68,12 @@ function buildFilter(options: RiwayatFilterOptions): string {
  */
 export function useTransactions(options: RiwayatFilterOptions = {}) {
   return useQuery({
-    queryKey: queryKeys.transactions.list(options),
+    queryKey: queryKeys.transactions.list({
+      search: options.search,
+      periode: options.periode,
+      dateFrom: options.dateFrom,
+      dateTo: options.dateTo,
+    }),
     queryFn: async () => {
       const filter = buildFilter(options);
 
@@ -79,7 +84,6 @@ export function useTransactions(options: RiwayatFilterOptions = {}) {
           sort: "-created",
         });
 
-      // Fetch items for each transaction
       const withItems = await Promise.all(
         list.map(async (trx) => {
           const items = await pb
@@ -158,10 +162,6 @@ export function useTransaksiTerakhir(limit: number = 5) {
 
 /**
  * Create transaksi + items + decrement stock (multi-step)
- *
- * PERHATIAN: PocketBase tidak punya native transactions,
- * jadi kalau salah satu step gagal, kita perlu manual rollback.
- * Untuk MVP: kita accept risiko partial write dengan error handling.
  */
 export function useCreateTransaction() {
   const qc = useQueryClient();
@@ -171,16 +171,14 @@ export function useCreateTransaction() {
       const user = getCurrentUser();
       if (!user) throw new Error("User tidak terauthentikasi");
 
-      // Step 1: Fetch current stock untuk semua items
       const stockItems = await Promise.all(
         input.items.map((item) =>
-          pb.collection(COLLECTIONS.STOCK_ITEMS).getOne<StockItem>(
-            item.stock_item_id
-          )
+          pb
+            .collection(COLLECTIONS.STOCK_ITEMS)
+            .getOne<StockItem>(item.stock_item_id)
         )
       );
 
-      // Step 2: Create transaction header
       const transaction = await pb
         .collection(COLLECTIONS.TRANSACTIONS)
         .create<Transaksi>({
@@ -191,7 +189,6 @@ export function useCreateTransaction() {
           created_by: user.id,
         });
 
-      // Step 3: Create transaction items + update stock
       const createdItems: TransactionItem[] = [];
 
       for (let i = 0; i < input.items.length; i++) {
@@ -201,7 +198,6 @@ export function useCreateTransaction() {
         const stokSebelum = stock.stok;
         const stokSesudah = stokSebelum - item.jumlah;
 
-        // Create transaction item
         const trxItem = await pb
           .collection(COLLECTIONS.TRANSACTION_ITEMS)
           .create<TransactionItem>({
@@ -214,14 +210,12 @@ export function useCreateTransaction() {
 
         createdItems.push(trxItem);
 
-        // Update stock
         await pb
           .collection(COLLECTIONS.STOCK_ITEMS)
           .update(item.stock_item_id, {
             stok: stokSesudah,
           });
 
-        // Create stock log
         await pb.collection(COLLECTIONS.STOCK_LOGS).create({
           stock_item: item.stock_item_id,
           tipe: "keluar",
@@ -256,7 +250,6 @@ export function useCancelTransaction() {
       const user = getCurrentUser();
       if (!user) throw new Error("User tidak terauthentikasi");
 
-      // Get transaction
       const transaction = await pb
         .collection(COLLECTIONS.TRANSACTIONS)
         .getOne<Transaksi>(transactionId);
@@ -265,14 +258,12 @@ export function useCancelTransaction() {
         throw new Error("Transaksi sudah dibatalkan sebelumnya");
       }
 
-      // Get all items
       const items = await pb
         .collection(COLLECTIONS.TRANSACTION_ITEMS)
         .getFullList<TransactionItem>({
           filter: `transaction = "${transactionId}"`,
         });
 
-      // Restore stock untuk setiap item
       for (const item of items) {
         const stock = await pb
           .collection(COLLECTIONS.STOCK_ITEMS)
@@ -285,7 +276,6 @@ export function useCancelTransaction() {
           stok: stokSesudah,
         });
 
-        // Log stock restore
         await pb.collection(COLLECTIONS.STOCK_LOGS).create({
           stock_item: item.stock_item,
           tipe: "batal",
@@ -298,7 +288,6 @@ export function useCancelTransaction() {
         });
       }
 
-      // Mark transaction as cancelled
       return await pb
         .collection(COLLECTIONS.TRANSACTIONS)
         .update<Transaksi>(transactionId, {

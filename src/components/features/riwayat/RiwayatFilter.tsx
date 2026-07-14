@@ -2,7 +2,7 @@
 
 import { FilterChips, type FilterChipOption } from "@/components/shared/FilterChips";
 import { SearchInput } from "@/components/shared/SearchInput";
-import type { RiwayatPeriode } from "@/lib/mock-data";
+import type { RiwayatPeriode } from "@/hooks/useTransaksi";
 
 interface RiwayatFilterProps {
   searchValue: string;

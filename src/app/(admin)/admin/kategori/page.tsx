@@ -1,14 +1,21 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { KategoriForm } from "@/components/features/lainnya/KategoriForm";
 import { KategoriList } from "@/components/features/lainnya/KategoriList";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { mockKategoris } from "@/lib/mock-data";
+import {
+  useCategories,
+  useCreateCategory,
+  useDeleteCategory,
+  useUpdateCategory,
+} from "@/hooks/useCategories";
+import { parsePocketBaseError } from "@/lib/pocketbase/api";
 import type { Kategori } from "@/types";
 
 export default function AdminKategoriPage() {
@@ -20,9 +27,11 @@ export default function AdminKategoriPage() {
   const [kategoriToDelete, setKategoriToDelete] = useState<Kategori | null>(
     null
   );
-  const [isLoading, setIsLoading] = useState(false);
 
-  const kategoris = mockKategoris;
+  const { data: kategoris, isLoading, error, refetch } = useCategories();
+  const createMutation = useCreateCategory();
+  const updateMutation = useUpdateCategory();
+  const deleteMutation = useDeleteCategory();
 
   const handleAdd = () => {
     setSelectedKategori(null);
@@ -40,37 +49,40 @@ export default function AdminKategoriPage() {
   };
 
   const handleSubmit = async (values: { nama: string; urutan?: number }) => {
-    setIsLoading(true);
     try {
-      console.log(selectedKategori ? "Update:" : "Create:", values);
-      await new Promise((r) => setTimeout(r, 500));
-      toast.success(
-        selectedKategori
-          ? "✓ Kategori berhasil diperbarui"
-          : "✓ Kategori berhasil ditambahkan"
-      );
+      if (selectedKategori) {
+        await updateMutation.mutateAsync({
+          id: selectedKategori.id,
+          input: values,
+        });
+        toast.success("✓ Kategori berhasil diperbarui");
+      } else {
+        await createMutation.mutateAsync(values);
+        toast.success("✓ Kategori berhasil ditambahkan");
+      }
       setFormOpen(false);
-    } catch {
-      toast.error("Gagal menyimpan kategori");
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      toast.error("Gagal menyimpan kategori", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!kategoriToDelete) return;
-    setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await deleteMutation.mutateAsync(kategoriToDelete.id);
       toast.success("✓ Kategori berhasil dihapus");
       setDeleteConfirmOpen(false);
       setKategoriToDelete(null);
-    } catch {
-      toast.error("Gagal menghapus kategori");
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      toast.error("Gagal menghapus kategori", {
+        description: parsePocketBaseError(err),
+      });
     }
   };
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   return (
     <>
@@ -90,12 +102,23 @@ export default function AdminKategoriPage() {
           Kelompok utama seragam (contoh: Harian, Olahraga, Pramuka).
         </p>
 
-        <KategoriList
-          kategoris={kategoris}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onAdd={handleAdd}
-        />
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--color-primary-500)]" />
+          </div>
+        ) : error ? (
+          <ErrorState
+            description={parsePocketBaseError(error)}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <KategoriList
+            kategoris={kategoris ?? []}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAdd={handleAdd}
+          />
+        )}
       </div>
 
       <KategoriForm
@@ -103,7 +126,7 @@ export default function AdminKategoriPage() {
         onOpenChange={setFormOpen}
         kategori={selectedKategori}
         onSubmit={handleSubmit}
-        isLoading={isLoading}
+        isLoading={isSubmitting}
       />
 
       <ConfirmDialog
@@ -118,7 +141,7 @@ export default function AdminKategoriPage() {
         }
         confirmLabel="Ya, Hapus"
         onConfirm={handleConfirmDelete}
-        isLoading={isLoading}
+        isLoading={deleteMutation.isPending}
         variant="danger"
       />
     </>

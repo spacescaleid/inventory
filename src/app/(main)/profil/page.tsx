@@ -8,10 +8,10 @@ import {
   Loader2,
   LogOut,
   Mail,
-  Settings,
   Shield,
   Shirt,
   User as UserIcon,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -113,7 +113,7 @@ export default function ProfilPage() {
           </div>
         </div>
 
-        {/* Informasi Akun */}
+        {/* Info Akun */}
         <section>
           <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
             Informasi Akun
@@ -139,7 +139,7 @@ export default function ProfilPage() {
           </div>
         </section>
 
-        {/* Kelola Data */}
+        {/* Kelola Data Master */}
         <section>
           <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
             Kelola Data Master
@@ -149,7 +149,7 @@ export default function ProfilPage() {
             <MenuLinkRow
               icon={Layers}
               label="Kategori Seragam"
-              description="Seragam Harian, Olahraga, Pramuka"
+              description="Harian, Olahraga, Pramuka"
               href={ROUTES.KELOLA_KATEGORI}
               iconBg="bg-[var(--color-primary-100)]"
               iconColor="text-[var(--color-primary-600)]"
@@ -170,6 +170,15 @@ export default function ProfilPage() {
               href={ROUTES.KELOLA_KELAS}
               iconBg="bg-[var(--color-success-100)]"
               iconColor="text-[var(--color-success-600)]"
+              divider
+            />
+            <MenuLinkRow
+              icon={Users}
+              label="Siswa"
+              description="Daftar siswa per kelas"
+              href={ROUTES.KELOLA_SISWA}
+              iconBg="bg-[var(--color-warning-100)]"
+              iconColor="text-[var(--color-warning-600)]"
               divider
             />
           </div>
@@ -240,10 +249,6 @@ export default function ProfilPage() {
     </>
   );
 }
-
-// ============================================
-// Sub components
-// ============================================
 
 function InfoRow({
   icon: Icon,

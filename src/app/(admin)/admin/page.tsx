@@ -8,6 +8,7 @@ import {
   Eye,
   GraduationCap,
   Layers,
+  Loader2,
   Package,
   Settings,
   Shield,
@@ -17,37 +18,27 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { TopAppBar } from "@/components/layout/TopAppBar";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
 import { useAuth } from "@/hooks/useAuth";
-import { mockUsers } from "@/lib/mock-users";
-import {
-  getMockStats,
-  getMockStokMenipis,
-  mockJenis,
-  mockKategoris,
-  mockTransactions,
-} from "@/lib/mock-data";
+import { useAdminStats } from "@/hooks/useDashboard";
+import { useStokMenipis } from "@/hooks/useStok";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { formatNumber } from "@/utils/format";
 import { getGreeting } from "@/utils/date";
 import { cn } from "@/utils/cn";
-import { useEffect, useState } from "react";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth({ required: true, requireAdmin: true });
   const namaSekolah = useSettingsStore((s) => s.namaSekolah);
   const tahunAjaran = useSettingsStore((s) => s.tahunAjaran);
+  const threshold = useSettingsStore((s) => s.thresholdMenipis);
 
-  // Stats
-  const stats = getMockStats();
-  const stokMenipis = getMockStokMenipis();
-  const totalUsers = mockUsers.length;
-  const activeUsers = mockUsers.filter((u) => u.is_active).length;
-  const totalTransactions = mockTransactions.filter((t) => !t.is_cancelled).length;
+  const { data: stats, isLoading: statsLoading } = useAdminStats();
+  const { data: stokMenipis } = useStokMenipis(threshold);
 
-  // Greeting client-only untuk hindari hydration
   const [mounted, setMounted] = useState(false);
   const [greeting, setGreeting] = useState("Selamat datang");
 
@@ -110,40 +101,51 @@ export default function AdminDashboardPage() {
             Ringkasan Sistem
           </h2>
 
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard
-              icon={Users}
-              label="Total User"
-              value={totalUsers}
-              detail={`${activeUsers} aktif`}
-              color="primary"
-              href={ROUTES.ADMIN_USERS}
-            />
-            <StatCard
-              icon={Package}
-              label="Total Stok"
-              value={stats.totalItems}
-              detail="unit"
-              color="info"
-              href={ROUTES.ADMIN_LAPORAN}
-            />
-            <StatCard
-              icon={Activity}
-              label="Transaksi"
-              value={totalTransactions}
-              detail="total"
-              color="success"
-              href={ROUTES.ADMIN_LAPORAN}
-            />
-            <StatCard
-              icon={Layers}
-              label="Kategori"
-              value={mockKategoris.length}
-              detail={`${mockJenis.length} jenis`}
-              color="warning"
-              href={ROUTES.ADMIN_KATEGORI}
-            />
-          </div>
+          {statsLoading || !stats ? (
+            <div className="grid grid-cols-2 gap-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-32 animate-pulse rounded-xl bg-white shadow-sm"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                icon={Users}
+                label="Total User"
+                value={stats.totalUsers}
+                detail={`${stats.activeUsers} aktif`}
+                color="primary"
+                href={ROUTES.ADMIN_USERS}
+              />
+              <StatCard
+                icon={Package}
+                label="Total Stok"
+                value={stats.totalStok}
+                detail="unit"
+                color="info"
+                href={ROUTES.ADMIN_LAPORAN}
+              />
+              <StatCard
+                icon={Activity}
+                label="Transaksi"
+                value={stats.totalTransactions}
+                detail="total"
+                color="success"
+                href={ROUTES.ADMIN_LAPORAN}
+              />
+              <StatCard
+                icon={Layers}
+                label="Kategori"
+                value={stats.totalCategories}
+                detail={`${stats.totalUniformTypes} jenis`}
+                color="warning"
+                href={ROUTES.ADMIN_KATEGORI}
+              />
+            </div>
+          )}
         </section>
 
         {/* Quick actions */}
@@ -181,7 +183,7 @@ export default function AdminDashboardPage() {
         </section>
 
         {/* Alerts */}
-        {stokMenipis.length > 0 && (
+        {stokMenipis && stokMenipis.length > 0 && (
           <section>
             <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
               ⚠️ Perlu Perhatian
@@ -207,7 +209,7 @@ export default function AdminDashboardPage() {
           </section>
         )}
 
-        {/* Manajemen data master */}
+        {/* Data Master */}
         <section>
           <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-neutral-500)]">
             Data Master
@@ -217,21 +219,28 @@ export default function AdminDashboardPage() {
             <MasterDataRow
               icon={Layers}
               label="Kategori Seragam"
-              count={mockKategoris.length}
+              count={stats?.totalCategories ?? 0}
               href={ROUTES.ADMIN_KATEGORI}
             />
             <MasterDataRow
               icon={Shirt}
               label="Jenis Seragam"
-              count={mockJenis.length}
+              count={stats?.totalUniformTypes ?? 0}
               href={ROUTES.ADMIN_JENIS}
               divider
             />
             <MasterDataRow
               icon={GraduationCap}
               label="Kelas"
-              count={4}
+              count={stats?.totalClasses ?? 0}
               href={ROUTES.ADMIN_KELAS}
+              divider
+            />
+            <MasterDataRow
+              icon={Users}
+              label="Siswa"
+              count={stats?.totalStudents ?? 0}
+              href={ROUTES.ADMIN_SISWA}
               divider
             />
           </div>

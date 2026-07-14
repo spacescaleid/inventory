@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { mockTransactions } from "@/lib/mock-data";
+import { useTransactions } from "@/hooks/useTransaksi";
 import { exportTransaksiToCSV } from "@/utils/export";
 
 interface ExportOption {
@@ -24,6 +24,9 @@ interface ExportOption {
 export function ExportButton() {
   const [open, setOpen] = useState(false);
   const [isExporting, setIsExporting] = useState<string | null>(null);
+
+  const { data: allTransactions } = useTransactions({ periode: "semua" });
+  const activeTransactions = allTransactions?.filter((t) => !t.is_cancelled);
 
   const handleExport = async (option: ExportOption) => {
     setIsExporting(option.key);
@@ -43,20 +46,22 @@ export function ExportButton() {
     {
       key: "all-transactions",
       label: "Semua Riwayat",
-      description: `${mockTransactions.length} transaksi total`,
-      action: () => exportTransaksiToCSV(mockTransactions, "riwayat-semua.csv"),
+      description: `${allTransactions?.length ?? 0} transaksi total`,
+      action: () => {
+        if (!allTransactions) throw new Error("Data belum siap");
+        exportTransaksiToCSV(allTransactions, "riwayat-semua.csv");
+      },
     },
     {
       key: "active-transactions",
       label: "Riwayat Aktif",
       description: `${
-        mockTransactions.filter((t) => !t.is_cancelled).length
+        activeTransactions?.length ?? 0
       } transaksi (tanpa yang dibatalkan)`,
-      action: () =>
-        exportTransaksiToCSV(
-          mockTransactions.filter((t) => !t.is_cancelled),
-          "riwayat-aktif.csv"
-        ),
+      action: () => {
+        if (!activeTransactions) throw new Error("Data belum siap");
+        exportTransaksiToCSV(activeTransactions, "riwayat-aktif.csv");
+      },
     },
   ];
 
@@ -67,6 +72,7 @@ export function ExportButton() {
         size="mobile"
         onClick={() => setOpen(true)}
         className="w-full"
+        disabled={!allTransactions}
       >
         <Download className="h-4 w-4" />
         Ekspor Data

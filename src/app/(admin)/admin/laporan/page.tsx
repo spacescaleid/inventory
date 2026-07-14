@@ -3,23 +3,34 @@
 import { AlertTriangle, Package, TrendingUp, Users } from "lucide-react";
 import { ExportButton } from "@/components/features/lainnya/ExportButton";
 import { TopAppBar } from "@/components/layout/TopAppBar";
-import {
-  getMockStats,
-  getMockStokMenipis,
-  mockTransactions,
-} from "@/lib/mock-data";
+import { useAdminStats } from "@/hooks/useDashboard";
+import { useStokMenipis } from "@/hooks/useStok";
+import { useTransactions } from "@/hooks/useTransaksi";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { formatNumber } from "@/utils/format";
 
 export default function AdminLaporanPage() {
-  const stats = getMockStats();
-  const stokMenipis = getMockStokMenipis();
-  const totalKeluar = mockTransactions
-    .filter((t) => !t.is_cancelled)
-    .reduce(
-      (sum, trx) => sum + trx.items.reduce((s, i) => s + i.jumlah, 0),
+  const threshold = useSettingsStore((s) => s.thresholdMenipis);
+  const { data: stats, isLoading: statsLoading } = useAdminStats();
+  const { data: stokMenipis, isLoading: menipisLoading } =
+    useStokMenipis(threshold);
+  const { data: transactions } = useTransactions({ periode: "semua" });
+
+  const isLoading = statsLoading || menipisLoading;
+
+  const totalKeluar =
+    transactions?.reduce(
+      (sum, trx) =>
+        sum +
+        (trx.is_cancelled
+          ? 0
+          : trx.items.reduce((s, i) => s + i.jumlah, 0)),
       0
-    );
-  const uniqueSiswa = new Set(mockTransactions.map((t) => t.nama_siswa)).size;
+    ) ?? 0;
+
+  const uniqueSiswa = new Set(
+    transactions?.filter((t) => !t.is_cancelled).map((t) => t.nama_siswa) ?? []
+  ).size;
 
   return (
     <>
@@ -35,36 +46,47 @@ export default function AdminLaporanPage() {
             Ringkasan
           </h2>
 
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard
-              icon={Package}
-              label="Total Stok"
-              value={stats.totalItems}
-              unit="unit"
-              color="primary"
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Total Keluar"
-              value={totalKeluar}
-              unit="unit"
-              color="success"
-            />
-            <StatCard
-              icon={Users}
-              label="Siswa Terlayani"
-              value={uniqueSiswa}
-              unit="siswa"
-              color="info"
-            />
-            <StatCard
-              icon={AlertTriangle}
-              label="Stok Menipis"
-              value={stokMenipis.length}
-              unit="jenis"
-              color="warning"
-            />
-          </div>
+          {isLoading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-32 animate-pulse rounded-xl bg-white shadow-sm"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                icon={Package}
+                label="Total Stok"
+                value={stats?.totalStok ?? 0}
+                unit="unit"
+                color="primary"
+              />
+              <StatCard
+                icon={TrendingUp}
+                label="Total Keluar"
+                value={totalKeluar}
+                unit="unit"
+                color="success"
+              />
+              <StatCard
+                icon={Users}
+                label="Siswa Terlayani"
+                value={uniqueSiswa}
+                unit="siswa"
+                color="info"
+              />
+              <StatCard
+                icon={AlertTriangle}
+                label="Stok Menipis"
+                value={stokMenipis?.length ?? 0}
+                unit="jenis"
+                color="warning"
+              />
+            </div>
+          )}
         </section>
 
         <section>

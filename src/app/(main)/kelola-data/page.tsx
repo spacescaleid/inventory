@@ -5,6 +5,7 @@ import {
   GraduationCap,
   Layers,
   Shirt,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -47,6 +48,14 @@ export default function KelolaDataPage() {
       iconBg: "bg-[var(--color-success-100)]",
       iconColor: "text-[var(--color-success-600)]",
     },
+    {
+      label: "Siswa",
+      description: "Daftar siswa per kelas",
+      href: ROUTES.KELOLA_SISWA,
+      icon: Users,
+      iconBg: "bg-[var(--color-warning-100)]",
+      iconColor: "text-[var(--color-warning-600)]",
+    },
   ];
 
   return (
@@ -55,7 +64,7 @@ export default function KelolaDataPage() {
 
       <div className="space-y-4 px-4 py-4">
         <p className="px-1 text-xs text-[var(--color-neutral-500)]">
-          Kelola data master untuk kategori, jenis seragam, dan kelas.
+          Kelola data master untuk kategori, jenis seragam, kelas, dan siswa.
         </p>
 
         <div className="overflow-hidden rounded-xl bg-white shadow-sm">
